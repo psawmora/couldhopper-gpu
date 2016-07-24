@@ -1,0 +1,32 @@
+<assembly>
+    <id>bin</id>
+    <formats>
+        <format>tar.gz</format>
+    </formats>
+    <fileSets>
+        <fileSet>
+            <directory>target</directory>
+            <outputDirectory>logs</outputDirectory>
+            <excludes>
+                <exclude>**/*</exclude>
+            </excludes>
+        </fileSet>
+        <fileSet>
+            <directory>target/generated-resources/appassembler/jsw/simulator/conf</directory>
+            <outputDirectory>conf</outputDirectory>
+        </fileSet>
+        <fileSet>
+            <directory>target/generated-resources/appassembler/jsw/simulator/bin</directory>
+            <outputDirectory>bin</outputDirectory>
+            <fileMode>0755</fileMode>
+            <directoryMode>755</directoryMode>
+        </fileSet>
+        <fileSet>
+            <directory>target/generated-resources/appassembler/jsw/simulator/lib</directory>
+            <outputDirectory>lib</outputDirectory>
+            <excludes>
+                <exclude>wrapper.jar</exclude>
+            </excludes>
+        </fileSet>
+    </fileSets>
+</assembly>

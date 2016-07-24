@@ -11,7 +11,19 @@
     <modelVersion>4.0.0</modelVersion>
     <artifactId>simulator</artifactId>
 
+    <properties>
+        <conf.file.path>../generated-resources/appassembler/jsw/simulator/conf</conf.file.path>
+    </properties>
+
     <dependencies>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-context</artifactId>
@@ -23,10 +35,148 @@
             <version>${spring.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.cloudhopper</groupId>
+            <groupId>tanukisoft</groupId>
+            <artifactId>wrapper</artifactId>
+            <version>3.2.3</version>
+        </dependency>
+        <dependency>
+            <groupId>psaw.cloudhopper</groupId>
             <artifactId>ch-smpp</artifactId>
             <version>${cloudhopper.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.cloudhopper</groupId>
+            <artifactId>ch-commons-charset</artifactId>
+            <version>3.0.0</version>
+<!--
+            <exclusions>
+                <exclusion>
+                    <groupId>joda-time</groupId>
+                    <artifactId>joda-time</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+            </exclusions>
+-->
+        </dependency>
     </dependencies>
 
+    <build>
+        <sourceDirectory>src/main/java</sourceDirectory>
+        <testSourceDirectory>src/test/java</testSourceDirectory>
+        <finalName>simulator</finalName>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <targetPath>${conf.file.path}</targetPath>
+                <includes>
+                    <include>**/*</include>
+                </includes>
+            </resource>
+        </resources>
+        <testResources>
+            <testResource>
+                <directory>src/test/test-resources</directory>
+            </testResource>
+        </testResources>
+        <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>appassembler-maven-plugin</artifactId>
+                <version>1.0</version>
+                <configuration>
+                    <generateRepository>true</generateRepository>
+                    <repoPath>lib</repoPath>
+                    <repositoryLayout>flat</repositoryLayout>
+                    <includeConfigurationDirectoryInClasspath>true</includeConfigurationDirectoryInClasspath>
+                    <assembleDirectory>target/generated-resources/appassembler/jsw/simulator/</assembleDirectory>
+                    <showConsoleWindow>true</showConsoleWindow>
+                    <configurationDirectory>conf</configurationDirectory>
+                    <defaultJvmSettings>
+                        <initialMemorySize>512M</initialMemorySize>
+                        <maxMemorySize>1024M</maxMemorySize>
+                    </defaultJvmSettings>
+                    <daemons>
+                        <daemon>
+                            <id>simulator</id>
+                            <mainClass>psaw.java.smpp.boot.SimulatorStarter</mainClass>
+                            <platforms>
+                                <platform>jsw</platform>
+                            </platforms>
+                            <generatorConfigurations>
+                                <generatorConfiguration>
+                                    <generator>jsw</generator>
+                                    <configuration>
+                                        <property>
+                                            <name>configuration.directory.in.classpath.first</name>
+                                            <value>conf</value>
+                                        </property>
+                                        <property>
+                                            <name>set.default.REPO_DIR</name>
+                                            <value>lib</value>
+                                        </property>
+                                        <property>
+                                            <name>wrapper.logfile</name>
+                                            <value>logs/wrapper.log</value>
+                                        </property>
+                                        <property>
+                                            <name>wrapper.java.mainclass</name>
+                                            <value>psaw.java.smpp.boot.SimulatorStarter</value>
+                                        </property>
+                                        <property>
+                                            <name>wrapper.startup.timeout</name>
+                                            <value>600</value>
+                                        </property>
+                                    </configuration>
+                                    <includes>
+                                        <include>solaris-sparc-32</include>
+                                        <include>solaris-sparc-64</include>
+                                        <include>solaris-x86-32</include>
+                                        <include>solaris-x86-64</include>
+                                        <include>linux-x86-32</include>
+                                        <include>windows-x86-32</include>
+                                        <include>linux-x86-64</include>
+                                        <include>windows-x86-64</include>
+                                    </includes>
+                                </generatorConfiguration>
+                            </generatorConfigurations>
+                        </daemon>
+                    </daemons>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>generate-daemons</goal>
+                            <goal>create-repository</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <version>2.3</version>
+                <configuration>
+                    <descriptors>
+                        <descriptor>src/main/assembly/src.xml</descriptor>
+                    </descriptors>
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+        </plugins>
+    </build>
 </project>
