@@ -16,6 +16,14 @@
             </Policies>
         </RollingFile>
 
+        <RollingFile name="tps-logger" fileName="${log-path}/tps.log"
+                     filePattern="${log-path}/tps-${log-rotate-pattern}">
+            <PatternLayout pattern="%m%n"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="15" modulate="true"/>
+            </Policies>
+        </RollingFile>
+
         <RollingFile name="error" fileName="${log-path}/smpp-sim-error.log"
                      filePattern="${log-path}/smpp-sim-error-${log-rotate-pattern}">
             <PatternLayout pattern="${log-pattern}"/>
@@ -39,6 +47,10 @@
             <appender-ref ref="debug" level="debug"/>
             <appender-ref ref="info" level="info"/>
             <appender-ref ref="error" level="error"/>
+        </Logger>
+
+        <Logger name="TPS_LOG" additivity="false" level="debug">
+            <appender-ref ref="tps-logger" level="debug"/>
         </Logger>
 
         <Logger name="org.springframework" additivity="false" level="error">

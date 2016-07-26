@@ -6,6 +6,7 @@ import com.cloudhopper.smpp.pdu.PduRequest;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import psaw.java.smpp.service.SmppResponseNotifier;
+import psaw.java.smpp.util.TpsLogger;
 
 /**
  * <p>
@@ -31,13 +32,14 @@ public class ClientSmppSessionHandler extends DefaultSmppSessionHandler {
     @Override
     public void firePduRequestExpired(PduRequest pduRequest) {
         logger.debug("SMPP request expired [{}]", pduRequest);
-        smppResponseNotifier.notifyFailedResponse(String.valueOf(pduRequest.getSequenceNumber()));
+//        smppResponseNotifier.notifyFailedResponse(String.valueOf(pduRequest.getSequenceNumber()));
     }
 
     @Override
     public void fireExpectedPduResponseReceived(PduAsyncResponse pduAsyncResponse) {
         logger.debug("Pdu Response Received : [{}]", pduAsyncResponse.getResponse());
-        smppResponseNotifier.notifyResponse(pduAsyncResponse.getResponse());
+        TpsLogger.getInstance().logResponseReceived(pduAsyncResponse.getResponse());
+//        smppResponseNotifier.notifyResponse(pduAsyncResponse.getResponse());
     }
 
     public void setSmppResponseNotifier(SmppResponseNotifier smppResponseNotifier) {

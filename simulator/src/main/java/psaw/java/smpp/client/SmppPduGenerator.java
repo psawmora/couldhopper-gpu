@@ -14,6 +14,7 @@ import org.apache.logging.log4j.Logger;
 import psaw.java.smpp.service.SmppClientConfiguration;
 import psaw.java.smpp.service.SmppRequestGenerator;
 import psaw.java.smpp.util.SequenceNumberGenerator;
+import psaw.java.smpp.util.TpsLogger;
 
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -78,7 +79,7 @@ public class SmppPduGenerator {
         sessionConfiguration.setHost(smppClientConfiguration.getHost());
         sessionConfiguration.setPort(smppClientConfiguration.getPort());
         sessionConfiguration.setConnectTimeout(2000);
-        sessionConfiguration.setWindowSize(5);
+        sessionConfiguration.setWindowSize(20000);
         sessionConfiguration.setSystemType("Test-Client");
         sessionConfiguration.setWindowWaitTimeout(2000);
         sessionConfiguration.setWindowMonitorInterval(1000);
@@ -130,6 +131,7 @@ public class SmppPduGenerator {
     public void sendSubmitSm(SubmitSm submitSm, long timeout) {
         try {
             session.sendRequestPdu(submitSm, timeout, false);
+            TpsLogger.getInstance().logRequestSent(submitSm);
         } catch (RecoverablePduException
                 | UnrecoverablePduException
                 | SmppTimeoutException

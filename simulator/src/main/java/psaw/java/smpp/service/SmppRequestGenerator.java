@@ -64,7 +64,7 @@ public class SmppRequestGenerator {
         this.messageGenerateScheduler = Executors.newScheduledThreadPool(1);
         this.tpsResetScheduler = Executors.newScheduledThreadPool(1);
         this.tpsAndTimeLimits = new ArrayList<>();
-        String[] tpsTimeValues = pattern.split("|");
+        String[] tpsTimeValues = pattern.split("\\|");
         for (String tpsTimeValue : tpsTimeValues) {
             String[] tpsAndTimeDuo = tpsTimeValue.split(":");
             tpsAndTimeLimits.add(new TpsAndTimeLimit(Integer.parseInt(tpsAndTimeDuo[0]), Integer.parseInt(tpsAndTimeDuo[1])));
