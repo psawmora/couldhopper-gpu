@@ -40,8 +40,8 @@
             <version>3.2.3</version>
         </dependency>
         <dependency>
-            <groupId>psaw.cloudhopper</groupId>
-            <artifactId>ch-smpp</artifactId>
+            <groupId>psaw.java</groupId>
+            <artifactId>cloudhopper-smpp</artifactId>
             <version>${cloudhopper.version}</version>
         </dependency>
         <dependency>

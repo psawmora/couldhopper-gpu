@@ -9,8 +9,9 @@
     <packaging>pom</packaging>
     <version>1.0-SNAPSHOT</version>
     <modules>
-        <module>simulator</module>
         <module>parent</module>
+        <module>cloudhopper-smpp</module>
+        <module>simulator</module>
         <module>codec-core</module>
     </modules>
 
