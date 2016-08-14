@@ -1,3 +1,4 @@
+#include <smpp_util.h>
 #include "smpp_pdu_struct.h"
 
 jobject *createPdu(JNIEnv *env, DecodedContext *decodedContext);
@@ -28,18 +29,30 @@ JNIEXPORT void JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_Default
     cacheJField(env);
 }
 
-JNIEXPORT jobject
-JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder_decodePDU
-        (JNIEnv *env, jobject thisObj, jobject param) {
-    return startDecodingBatch(env, thisObj, param);
-}
 
-jobject startDecodingBatch(JNIEnv *env, jobject thisObj, jobject param) {
-    printf("Started decoding the batch\n");
-    jclass arrayListClass = jClassCache.arrayListClass;
-    jmethodID listSizeMethod = jmethodCache.listSizeMethod;
-    jint pduContextCount = (*env)->CallIntMethod(env, param, listSizeMethod);
-    printf("PduContext Count -> %d\n", pduContextCount);
+JNIEXPORT jobject JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder_decodePDUDirect
+        (JNIEnv *env, jobject thisObj, jobject pduContainerBuffer, jint size, jint correlationIdLength) {
+    jlong bufferCapacity = (*env)->GetDirectBufferCapacity(env, pduContainerBuffer);
+    uint8_t *pduBuffers = (uint8_t *) (*env)->GetDirectBufferAddress(env, pduContainerBuffer);
+    ByteBufferContext byteBufferContext = {pduBuffers, 0, bufferCapacity};
+    DirectPduContext *pduContexts = malloc(sizeof(DirectPduContext) * size);
+    int i;
+    int startPosition = 0;
+    for (i = 0; i < size; i++) {
+        char *correlationId = readStringByLength(&byteBufferContext, correlationIdLength);
+        uint32_t pduLength = readUint32(&byteBufferContext);
+        int startIndex = startPosition + correlationIdLength;
+        pduContexts[i].correlationId = correlationId;
+        pduContexts[i].pduBuffer = pduBuffers;
+        pduContexts[i].start = startIndex;
+        pduContexts[i].length = pduLength;
+        startPosition += (correlationIdLength + pduLength);
+/*
+        printf("CorrelationId - %s | Read Index - %d |  pdu length -  %d | start-position - %d\n",
+               correlationId, byteBufferContext.readIndex, pduLength, startPosition);
+*/
+        byteBufferContext.readIndex = startPosition;
+    }
 
     jclass decodedContextContainerClass = jClassCache.arrayListClass;
     jmethodID decodedContextContainerMethod = jmethodCache.decodedContextContainerMethod;
@@ -47,43 +60,18 @@ jobject startDecodingBatch(JNIEnv *env, jobject thisObj, jobject param) {
                                                         decodedContextContainerMethod);
     jmethodID addDecodedContextMethodId = jmethodCache.addDecodedContextMethodId;
 
-    PduContext *pduContexts = malloc(sizeof(PduContext) * pduContextCount);
-
-    int i;
-    for (i = 0; i < pduContextCount; i++) {
-        jmethodID listGetMethod = jmethodCache.listGetMethod;
-        jobject pduContext = (*env)->CallObjectMethod(env, param, listGetMethod, i);
-        jclass pduContextClass = jClassCache.pduContextClass;
-        jfieldID correlationIdFieldId = jfieldCache.correlationIdFieldId;
-        jstring correlationIdString = (*env)->GetObjectField(env, pduContext, correlationIdFieldId);
-        const char *correlationId = (*env)->GetStringUTFChars(env, correlationIdString, NULL);
-//        printf("CorrelationId - %s\n", correlationId);
-
-        jfieldID byteBufferFieldId = jfieldCache.byteBufferFieldId;
-        jbyteArray *byteArrayNative = (*env)->GetObjectField(env, pduContext, byteBufferFieldId);
-        jbyte *byteArrayBuffer = (*env)->GetByteArrayElements(env, byteArrayNative, NULL);
-        jsize byteBufferLength = (*env)->GetArrayLength(env, byteArrayNative);
-//        printf("byteBuffer Size - %d\n", byteBufferLength);
-
-        PduContext context = {correlationId, byteArrayBuffer, byteBufferLength, byteArrayNative, correlationIdString};
-        pduContexts[i] = context;
-    }
-
-
     int nThread = N_THREAD;
     int index = 0;
-    int batchSize = pduContextCount > nThread ? pduContextCount / nThread : pduContextCount;
-    DecodedContext *decodedPduStructList = malloc(sizeof(DecodedContext) * pduContextCount);
+    int batchSize = size > nThread ? size / nThread : size;
+    DecodedContext *decodedPduStructList = malloc(sizeof(DecodedContext) * size);
     ThreadParam *threadParams[nThread];
 
     pthread_t threads[nThread];
     int threadIndex = 0;
-    while (index < pduContextCount) {
+    while (index < size) {
         int startIndex = index;
-        int length = (pduContextCount - index) <= batchSize ? (pduContextCount - index) : batchSize;
+        int length = (size - index) <= batchSize ? (size - index) : batchSize;
         index += length;
-        printf("start- %d | end- %d | next start - %d \n", startIndex, startIndex + length, index);
-//       ThreadParam threadParam = threadParams[threadIndex];
         ThreadParam *threadParam = malloc(sizeof(ThreadParam));
         threadParam->startIndex = startIndex;
         threadParam->length = length;
@@ -97,13 +85,11 @@ jobject startDecodingBatch(JNIEnv *env, jobject thisObj, jobject param) {
     for (i = 0; i < threadIndex; i++) {
         pthread_join(threads[i], NULL);
     }
-//    free(threadParams);
-    for (i = 0; i < pduContextCount; i++) {
+
+    free(threadParams);
+    for (i = 0; i < size; i++) {
         DecodedContext *decodedContext = &decodedPduStructList[i];
-        PduContext context = pduContexts[i];
         if (decodedContext != 0) {
-//        printf("Not Null decodedPduStructure\n");
-//        printf("SMPP PDU type %d\n", decodedContext->commandId);
             jobject *pdu = createPdu(env, decodedContext);
             if (pdu != 0) {
                 jclass decodedPduContextClass = jClassCache.decodedPduContextClass;
@@ -114,36 +100,29 @@ jobject startDecodingBatch(JNIEnv *env, jobject thisObj, jobject param) {
                                                                     (*env)->NewStringUTF(env,
                                                                                          decodedContext->correlationId),
                                                                     pdu);
-//        printf("Adding decoded PDU context.\n");
                 if ((*env)->ExceptionOccurred(env)) {
                     printf("Exception occurred\n\n");
                     freeDecodedContext(decodedContext);
-                    (*env)->ReleaseStringUTFChars(env, context.correlationIdString, decodedContext->correlationId);
-                    (*env)->ReleaseByteArrayElements(env, context.byteArrayNative, context.pduBuffer, 0);
-                    return;
                 }
-//        printf("Storing decoded PDU context.\n");
                 fflush(stdout);
                 (*env)->CallObjectMethod(env, decodedContextContainer, addDecodedContextMethodId,
                                          decodedPduContextObject);
             } else {
-                printf("PDU context is null.\n");
+                printf("PDU context is null. | Command Id %d \n", decodedContext->commandId);
             }
             freeDecodedContext(decodedContext);
-            (*env)->ReleaseStringUTFChars(env, context.correlationIdString, decodedContext->correlationId);
-            (*env)->ReleaseByteArrayElements(env, context.byteArrayNative, context.pduBuffer, 0);
         } else {
             printf("NULL decodedPduStructure\n");
         }
     }
-
+    free(decodedPduStructList);
     printf("Returning\n");
     fflush(stdout);
     return decodedContextContainer;
 }
 
 jobject *createPdu(JNIEnv *env, DecodedContext *decodedContext) {
-    printf("SMPP PDU type %d\n", decodedContext->commandId);
+//    printf("SMPP PDU type %d\n", decodedContext->commandId);
     if (decodedContext->commandId == 4) {
         SubmitSmReq submitSmReq = *(SubmitSmReq *) decodedContext->pduStruct;
 //        printf("SubmitSm Request - %d\n", submitSmReq.esmClass);

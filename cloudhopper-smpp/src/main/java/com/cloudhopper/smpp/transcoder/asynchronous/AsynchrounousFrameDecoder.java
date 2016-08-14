@@ -31,7 +31,7 @@ public class AsynchrounousFrameDecoder extends FrameDecoder {
     @Override
     protected Object decode(ChannelHandlerContext channelHandlerContext, Channel channel, ChannelBuffer buffer)
             throws Exception {
-//        System.out.println("Frame Decoder");
+        //        System.out.println("Frame Decoder");
         // wait until the length prefix is available
         return decodeTest(buffer);
     }
@@ -58,7 +58,7 @@ public class AsynchrounousFrameDecoder extends FrameDecoder {
         // at this point, we have the entire PDU and length already in the buffer
         // we'll create a new "view" of this PDU and read the data from the actual buffer
         // NOTE: this should be super fast since the underlying byte array doesn't get copied
-        ChannelBuffer pduContent = buffer.copy();
+        ChannelBuffer pduContent = buffer.copy(buffer.readerIndex(), commandLength);
         buffer.skipBytes(commandLength);
         return pduContent;
     }

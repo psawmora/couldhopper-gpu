@@ -5,6 +5,7 @@ Created by prabath on 6/26/16.
 
 #include <sys/types.h>
 #include <sys/syscall.h>
+#include <unistd.h>
 
 #include "smpp_pdu_struct.h"
 #include "smpp_util.h"
@@ -18,44 +19,51 @@ void *decode(void *threadParam) {
 
     pid_t x = syscall(__NR_gettid);
 
-    PduContext *pduContexts = context->pduContexts;
+    DirectPduContext *pduContexts = context->pduContexts;
     DecodedContext *decodedPduStructList = context->decodedPduStructList;
     int length = context->length;
     int startIndex = context->startIndex;
-    int i;
+    int i = startIndex;
     printf("Id %d - Start - %d | End - %d\n", x, i, startIndex + length);
     for (i = startIndex; i < startIndex + length; i++) {
         void *decodedPduStruct = decodeSingle(&pduContexts[i]);
         if (decodedPduStruct != 0) {
             DecodedContext *decodedContext = (DecodedContext *) decodedPduStruct;
+//            printf("Command-Id %d \n", decodedContext->commandId);
             decodedPduStructList[i] = *decodedContext;
+        } else {
+            printf("DecodedPduContext is NULL. PDU Id - %d  |  %s |\n", i, pduContexts[i].correlationId);
         }
     }
     printf("\n");
 }
 
-void *decodeSingle(PduContext *pduContext) {
+void *decodeSingle(DirectPduContext *pduContext) {
     char *correlationId = pduContext->correlationId;
-    long length = pduContext->pduBufferLength;
+    int length = pduContext->length;
+//    printf("Started decoding - %d\n", length);
+    int startIndex = pduContext->start;
     uint8_t *pduBuffer = pduContext->pduBuffer;
 //    printf("Correlation Id - %s\n", correlationId);
-//    printf("Started decoding - %d\n", length);
-    ByteBufferContext bufferContext = {pduBuffer, 0, length};
+    ByteBufferContext *bufferContext = malloc(sizeof(ByteBufferContext));
+    bufferContext->buffer = pduBuffer;
+    bufferContext->readIndex = startIndex;
+    bufferContext->limit = length;
 
     SmppHeader *smppHeader = malloc(sizeof(SmppHeader));
 
-    smppHeader->commandLength = readUint32(&bufferContext);
-    smppHeader->commandId = readUint32(&bufferContext);
-    smppHeader->commandStatus = readUint32(&bufferContext);
-    smppHeader->sequenceNumber = readUint32(&bufferContext);
+    smppHeader->commandLength = readUint32(bufferContext);
+    smppHeader->commandId = readUint32(bufferContext);
+    smppHeader->commandStatus = readUint32(bufferContext);
+    smppHeader->sequenceNumber = readUint32(bufferContext);
 
-//    printf("CommandLength - %d\n", smppHeader->commandLength);
-//    printf("CommandId - %d\n", smppHeader->commandId);
-//    printf("CommandStatus - %d\n", smppHeader->commandStatus);
-//    printf("SequenceNumber - %d\n", smppHeader->sequenceNumber);
-
+    /*printf("CommandLength - %d\n", smppHeader->commandLength);
+    printf("CommandId - %d\n", smppHeader->commandId);
+    printf("CommandStatus - %d\n", smppHeader->commandStatus);
+    printf("SequenceNumber - %d\n", smppHeader->sequenceNumber);
+*/
     if (smppHeader->commandId == 4) {
-        SubmitSmReq *submitSmReq = decodeSubmitSm(pduContext, &bufferContext);
+        SubmitSmReq *submitSmReq = decodeSubmitSm(pduContext, bufferContext);
         submitSmReq->header = smppHeader;
         DecodedContext *decodedContext = malloc(sizeof(DecodedContext));
         decodedContext->commandId = 4;

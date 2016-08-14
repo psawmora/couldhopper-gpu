@@ -17,6 +17,14 @@ JNIEXPORT jobject JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_Defa
 
 /*
  * Class:     com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder
+ * Method:    decodePDUDirect
+ * Signature: (Ljava/nio/ByteBuffer;II)Ljava/util/List;
+ */
+JNIEXPORT jobject JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder_decodePDUDirect
+  (JNIEnv *, jobject, jobject, jint, jint);
+
+/*
+ * Class:     com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder
  * Method:    initialize
  * Signature: ()V
  */

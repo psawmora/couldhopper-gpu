@@ -46,7 +46,7 @@ typedef struct jfield_cache {
     jfieldID correlationIdFieldId;
     jfieldID byteBufferFieldId;
 
-}JfieldCache;
+} JfieldCache;
 
 typedef struct jclass_cache {
     jclass arrayListClass;
@@ -56,6 +56,11 @@ typedef struct jclass_cache {
     jclass addressClass;
 } JclassCache;
 
+typedef struct pdu_input_struct {
+    char *correlationId;
+    uint8_t *pduBuffer;
+};
+
 typedef struct pdu_context_struct {
     char *correlationId;
     uint8_t *pduBuffer;
@@ -63,6 +68,13 @@ typedef struct pdu_context_struct {
     jbyteArray *byteArrayNative;
     jstring correlationIdString;
 } PduContext;
+
+typedef struct pdu_context_direct_struct {
+    char *correlationId;
+    uint8_t *pduBuffer;
+    uint32_t start;
+    uint32_t length;
+} DirectPduContext;
 
 typedef struct decoded_context_struct {
     char *correlationId;
@@ -115,12 +127,12 @@ typedef struct submit_sm_req_struct {
 typedef struct thread_param {
     int startIndex;
     int length;
-    PduContext *pduContexts;
+    DirectPduContext *pduContexts;
     DecodedContext *decodedPduStructList;;
 } ThreadParam;
 
 //SubmitSmReq *decodeSubmitSm(PduContext *pduContext);
-void *decodeSingle(PduContext *pduContext);
+void *decodeSingle(DirectPduContext *pduContext);
 
 void *decode(void *threadParam);
 

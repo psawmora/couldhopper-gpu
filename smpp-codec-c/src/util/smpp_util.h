@@ -22,6 +22,8 @@ char *readString(ByteBufferContext *pduBufferContext, int startIndex, int endInd
 
 char *readNullTerminatedString(ByteBufferContext *pduBufferContext, int maxLength);
 
+char *readStringByLength(ByteBufferContext *pduBufferContext, int length);
+
 uint8_t *readNBytes(ByteBufferContext *pduBufferContext, int length);
 
 #endif //SMPP_CODEC_C_SMPP_UTIL_H

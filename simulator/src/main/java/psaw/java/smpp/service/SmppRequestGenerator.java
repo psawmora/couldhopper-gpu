@@ -49,6 +49,8 @@ public class SmppRequestGenerator {
 
     private int currentTps;
 
+    private AtomicInteger count = new AtomicInteger(0);
+
     public SmppRequestGenerator(String pattern,
                                 SmppPduGenerator pduGenerator,
                                 SequenceNumberGenerator sequenceNumberGenerator,
@@ -113,8 +115,12 @@ public class SmppRequestGenerator {
                 SubmitSm submitSm = new SubmitSm();
                 submitSm.setSequenceNumber(sequenceNumberGenerator.getSequenceNumber());
                 submitSm.setEsmClass(SmppConstants.ESM_CLASS_MT_SMSC_DELIVERY_RECEIPT);
+                submitSm.setServiceType("t1");
                 submitSm.setShortMessage(message.getBytes());
+                //                if(count.incrementAndGet() <= 100000){
                 pduGenerator.sendSubmitSm(submitSm, 2000);
+                //                }
+                //                pduGenerator.sendSubmitSm(submitSm, 2000);
             } catch (SmppInvalidArgumentException e) {
                 return;
             }
