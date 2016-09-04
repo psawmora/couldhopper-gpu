@@ -36,6 +36,7 @@ JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDec
 
 jobject startDecodingBatch(JNIEnv *env, jobject thisObj, jobject param) {
     printf("Started decoding the batch\n");
+    test();
     jclass arrayListClass = jClassCache.arrayListClass;
     jmethodID listSizeMethod = jmethodCache.listSizeMethod;
     jint pduContextCount = (*env)->CallIntMethod(env, param, listSizeMethod);

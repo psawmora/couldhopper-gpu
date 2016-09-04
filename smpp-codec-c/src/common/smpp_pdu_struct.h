@@ -116,12 +116,14 @@ typedef struct thread_param {
     int startIndex;
     int length;
     PduContext *pduContexts;
-    DecodedContext *decodedPduStructList;;
+    DecodedContext *decodedPduStructList;
 } ThreadParam;
 
 //SubmitSmReq *decodeSubmitSm(PduContext *pduContext);
 void *decodeSingle(PduContext *pduContext);
 
 void *decode(void *threadParam);
+
+int test();
 
 #endif

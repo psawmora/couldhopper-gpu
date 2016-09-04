@@ -40,7 +40,7 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
 
     private ReentrantReadWriteLock.WriteLock writeLock;
 
-    private int batchSize = 600;
+    private int batchSize = 1;
 
     private AtomicInteger currentBatchSize;
 

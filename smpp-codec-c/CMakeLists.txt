@@ -4,11 +4,12 @@ endif()
 
 cmake_minimum_required(VERSION 2.8.7)
 project(smpp_codec_c)
-
+find_package(CUDA QUIET REQUIRED)
 
 set(smpp_codec_c_VERSION_MAJOR 0)
 set(smpp_codec_c_VERSION_MINOR 1)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -pthread -fPIC")
+set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -lm")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -lm -pthread -fPIC")
 if (DEFINED ENV{LIBRARY_OUTPUT_PATH})
     message(STATUS "LIBRARY_OUTPUT_PATH DEFINED=$ENV{LIBRARY_OUTPUT_PATH}")
 else()
@@ -30,6 +31,7 @@ include_directories(${JAVA_INCLUDE_PATH2})
 add_subdirectory(src/common)
 add_subdirectory(src/decoder)
 add_subdirectory(src/util)
+add_subdirectory(src/cuda-decoder)
 
 message (STATUS "JNI_INCLUDE_DIRS=${JNI_INCLUDE_DIRS}")
 message (STATUS "JAVA_HOME=$ENV{JAVA_HOME}")
@@ -39,7 +41,7 @@ message (STATUS "LIBRARY_OUTPUT_PATH="$ENV{LIBRARY_OUTPUT_PATH})
 
 #link_libraries(${LIBRARAY_NAME} ${JNI_LIBRARIES})
 
-add_library(${LIBRARAY_NAME} SHARED ${SOURCE_FILES})
+cuda_add_library(${LIBRARAY_NAME} SHARED ${SOURCE_FILES})
 set(LIBRARY_OUTPUT_PATH_REAL $ENV{LIBRARY_OUTPUT_PATH})
 message(STATUS "LIBRARY_OUTPUT_PATH="${LIBRARY_OUTPUT_PATH_REAL})
 install(TARGETS ${LIBRARAY_NAME} DESTINATION ${LIBRARY_OUTPUT_PATH_REAL})

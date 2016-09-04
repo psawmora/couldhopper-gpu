@@ -2,7 +2,7 @@
 <Configuration status="debug">
 
     <Properties>
-        <Property name="log-path">/hms/logs/smpp-sim</Property>
+        <Property name="log-path">/logs/smpp-sim</Property>
         <Property name="log-pattern">%d{yyyy-MM-dd HH:mm:ss,SSS} %p %c{1} [%X{correlation-id}][%X{remote-tx-id}] %m%n</Property>
         <Property name="log-rotate-pattern">%d{yyyy-MM-dd-HH:mm}.log</Property>
     </Properties>
