@@ -3,10 +3,15 @@ Copyright (c) 2016 Prabath Weerasinghe - MSC Project - SMPP Codec. All rights re
 Created by prabath on 6/26/16.
 */
 
-#include <stdint.h>
 #include <string.h>
-
+#include <stdio.h>
+#include <stdlib.h>
 #include "smpp_util.h"
+
+int str_len(const char *str) {
+    printf("char - %c | ", *str);
+    return (*str) ? str_len(++str) + 1 : 0;
+}
 
 uint8_t readUint8(ByteBufferContext *pduBufferContext) {
 //    printf("readUint8 - Read Index - %d | Limit - %d\n", pduBufferContext->readIndex, pduBufferContext->limit);
@@ -16,9 +21,12 @@ uint8_t readUint8(ByteBufferContext *pduBufferContext) {
 }
 
 uint32_t readUint32(ByteBufferContext *pduBufferContext) {
-//    printf("readUint32 - Read Index - %d | Limit - %d\n", pduBufferContext->readIndex, pduBufferContext->limit);
     uint8_t *buffer = pduBufferContext->buffer + pduBufferContext->readIndex;
     uint32_t value = (buffer[0] & 255) << 24 | (buffer[1] & 255) << 16 | (buffer[2] & 255) << 8 | (buffer[3] & 255);
+/*
+    printf("readUint32 - Read Index - %d | Limit - %d | Int Value %d\n", pduBufferContext->readIndex, pduBufferContext->limit,
+           value);
+*/
     pduBufferContext->readIndex += 4;
     return value;
 }
@@ -37,21 +45,15 @@ char *readString(ByteBufferContext *pduBufferContext, int startIndex, int length
     return NULL;
 }
 
-Tlv *decodeTLV(ByteBufferContext *pduBufferContext, int maxTlvCount) {
-    uint8_t *byteBuffer = pduBufferContext->buffer;
-    while (pduBufferContext->readIndex < pduBufferContext->limit) {
-        Tlv tlv;
-
-    }
-}
-
 uint8_t *readNBytes(ByteBufferContext *pduBufferContext, int length) {
-//    printf("readNBytes - Read Index - %d | Limit - %d\n",
-//    pduBufferContext->readIndex, pduBufferContext->limit);
+/*
+    printf("readNBytes - Read Index - %d | Limit - %d\n",
+           pduBufferContext->readIndex, pduBufferContext->limit);
+*/
 
     uint64_t readIndex = pduBufferContext->readIndex;
-    if (readIndex + length > pduBufferContext->limit) {
-//        printf("Read length - |%d| overflows the limit\n", length);
+    if (readIndex + length > readIndex + pduBufferContext->limit) {
+        printf("Read length - |%d| overflows the limit\n", length);
         return -1;
     }
 
@@ -67,17 +69,19 @@ uint8_t *readNBytes(ByteBufferContext *pduBufferContext, int length) {
 }
 
 char *readNullTerminatedString(ByteBufferContext *pduBufferContext, int maxLength) {
-/*    printf("readNullTerminatedString - Read Index - %d | Limit - %d\n",
-           pduBufferContext->readIndex, pduBufferContext->limit)*/;
+/*
+    printf("readNullTerminatedString - Read Index - %d | Limit - %d\n",
+           pduBufferContext->readIndex, pduBufferContext->limit);
+*/
 
     uint64_t readIndex = pduBufferContext->readIndex;
     const uint8_t *startPoint = (pduBufferContext->buffer) + readIndex;
-    int stringLength = strlen(startPoint);
+    int stringLength = str_len((const char *) startPoint);
     if (stringLength + 1 > maxLength) {
-//        printf("String length is greater than the maximum length - %d\n", stringLength);
+        printf("String length is greater than the maximum length - %d\n", stringLength);
         return -1;
     }
-//    printf("String length - %d\n", stringLength);
+//    printf("String length - %d | ReadIndex - %d \n", stringLength, readIndex);
     // Need to free memory as soon as the the JNI call returns.
     char *stringValue = (char *) malloc(sizeof(char) * (stringLength + 1));
     int i;
@@ -86,6 +90,26 @@ char *readNullTerminatedString(ByteBufferContext *pduBufferContext, int maxLengt
     }
     stringValue[stringLength] = '\0';
     pduBufferContext->readIndex += (stringLength + 1);
+    return stringValue;
+}
+
+char *readStringByLength(ByteBufferContext *pduBufferContext, int length) {
+/*
+    printf("readNullTerminatedString - Read Index - %d | Limit - %d\n",
+           pduBufferContext->readIndex, pduBufferContext->limit);
+*/
+
+    uint64_t readIndex = pduBufferContext->readIndex;
+    const uint8_t *startPoint = (pduBufferContext->buffer) + readIndex;
+//    printf("By Length - String length - %d | ReadIndex - %d \n", length, readIndex);
+    // Need to free memory as soon as the the JNI call returns.
+    char *stringValue = (char *) malloc(sizeof(char) * (length + 1));
+    int i;
+    for (i = 0; i < length; i++) {
+        stringValue[i] = startPoint[i];
+    }
+    stringValue[length] = '\0';
+    pduBufferContext->readIndex += length;
     return stringValue;
 }
 

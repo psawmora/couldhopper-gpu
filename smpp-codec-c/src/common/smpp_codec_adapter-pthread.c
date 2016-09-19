@@ -1,8 +1,15 @@
+
+#include "smpp_util.h"
 #include "smpp_pdu_struct.h"
+#include "smpp_pdu_struct_cuda.h"
 
 jobject *createPdu(JNIEnv *env, DecodedContext *decodedContext);
 
 jobject *getAddress(JNIEnv *env, Address *address);
+
+jobject *getCudaAddress(JNIEnv *env, CudaAddress *address);
+
+jobject *createPduOnCuda(JNIEnv *env, CudaDecodedContext *decodedContext);
 
 void cacheJClass(JNIEnv *env);
 
@@ -13,6 +20,12 @@ void cacheJField(JNIEnv *env);
 void freeDecodedContext(DecodedContext *decodedContext);
 
 jobject startDecodingBatch(JNIEnv *env, jobject thisObj, jobject param);
+
+jobject
+decodeWithPthread(JNIEnv *env, jobject pduContainerBuffer, jint size, jint correlationIdLength);
+
+jobject
+decodeWithCuda(JNIEnv *env, jobject pduContainerBuffer, jint size, jint correlationIdLength);
 
 static JclassCache jClassCache;
 
@@ -28,19 +41,32 @@ JNIEXPORT void JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_Default
     cacheJField(env);
 }
 
-JNIEXPORT jobject
-JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder_decodePDU
-        (JNIEnv *env, jobject thisObj, jobject param) {
-    return startDecodingBatch(env, thisObj, param);
+JNIEXPORT jobject JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder_decodePDUDirect
+        (JNIEnv *env, jobject thisObj, jobject pduContainerBuffer, jint size, jint correlationIdLength) {
+    return decodePduDirect(env, pduContainerBuffer, size, correlationIdLength);
 }
 
-jobject startDecodingBatch(JNIEnv *env, jobject thisObj, jobject param) {
-    printf("Started decoding the batch\n");
-    test();
-    jclass arrayListClass = jClassCache.arrayListClass;
-    jmethodID listSizeMethod = jmethodCache.listSizeMethod;
-    jint pduContextCount = (*env)->CallIntMethod(env, param, listSizeMethod);
-    printf("PduContext Count -> %d\n", pduContextCount);
+jobject
+decodeWithCuda(JNIEnv *env, jobject pduContainerBuffer, jint size, jint correlationIdLength) {
+    printf("Decoding Cuda\n");
+    jlong bufferCapacity = (*env)->GetDirectBufferCapacity(env, pduContainerBuffer);
+    uint8_t *pduBuffers = (uint8_t *) (*env)->GetDirectBufferAddress(env, pduContainerBuffer);
+    ByteBufferContext byteBufferContext = {pduBuffers, 0, (uint64_t) bufferCapacity};
+    CudaPduContext *pduContexts = malloc(sizeof(CudaPduContext) * size);
+    int i;
+    int startPosition = 0;
+    for (i = 0; i < size; i++) {
+        char *correlationId = readStringByLength(&byteBufferContext, correlationIdLength);
+        uint32_t pduLength = readUint32(&byteBufferContext);
+        int startIndex = startPosition + correlationIdLength;
+        strncpy(pduContexts[i].correlationId, correlationId, sizeof(char) * (correlationIdLength + 1));
+        pduContexts[i].start = (uint32_t) startIndex;
+        pduContexts[i].length = pduLength;
+        printf("CorrelationId 1 - %s | CorrelationId 2 - %s | start-position - %d| pdu length -  %d | Read Index - %ld \n",
+               correlationId, pduContexts[i].correlationId, startPosition, pduLength, byteBufferContext.readIndex);
+        startPosition += (correlationIdLength + pduLength);
+        byteBufferContext.readIndex = (uint64_t) startPosition;
+    }
 
     jclass decodedContextContainerClass = jClassCache.arrayListClass;
     jmethodID decodedContextContainerMethod = jmethodCache.decodedContextContainerMethod;
@@ -48,43 +74,85 @@ jobject startDecodingBatch(JNIEnv *env, jobject thisObj, jobject param) {
                                                         decodedContextContainerMethod);
     jmethodID addDecodedContextMethodId = jmethodCache.addDecodedContextMethodId;
 
-    PduContext *pduContexts = malloc(sizeof(PduContext) * pduContextCount);
-
-    int i;
-    for (i = 0; i < pduContextCount; i++) {
-        jmethodID listGetMethod = jmethodCache.listGetMethod;
-        jobject pduContext = (*env)->CallObjectMethod(env, param, listGetMethod, i);
-        jclass pduContextClass = jClassCache.pduContextClass;
-        jfieldID correlationIdFieldId = jfieldCache.correlationIdFieldId;
-        jstring correlationIdString = (*env)->GetObjectField(env, pduContext, correlationIdFieldId);
-        const char *correlationId = (*env)->GetStringUTFChars(env, correlationIdString, NULL);
-//        printf("CorrelationId - %s\n", correlationId);
-
-        jfieldID byteBufferFieldId = jfieldCache.byteBufferFieldId;
-        jbyteArray *byteArrayNative = (*env)->GetObjectField(env, pduContext, byteBufferFieldId);
-        jbyte *byteArrayBuffer = (*env)->GetByteArrayElements(env, byteArrayNative, NULL);
-        jsize byteBufferLength = (*env)->GetArrayLength(env, byteArrayNative);
-//        printf("byteBuffer Size - %d\n", byteBufferLength);
-
-        PduContext context = {correlationId, byteArrayBuffer, byteBufferLength, byteArrayNative, correlationIdString};
-        pduContexts[i] = context;
+    CudaDecodedContext *decodedPduStructList = malloc(sizeof(CudaDecodedContext) * size);
+    CudaMetadata metadata = {size, pduBuffers, pduContexts, decodedPduStructList, (uint64_t) bufferCapacity};
+//    fflush(stdout);
+    decodeCuda(metadata);
+    for (i = 0; i < size; i++) {
+        CudaDecodedContext *decodedContext = &decodedPduStructList[i];
+        if (decodedContext != 0) {
+            jobject *pdu = createPduOnCuda(env, decodedContext);
+            if (pdu != 0) {
+                jclass decodedPduContextClass = jClassCache.decodedPduContextClass;
+                jmethodID decodedPduContextconstructor = jmethodCache.decodedPduContextconstructor;
+                jobject decodedPduContextObject = (*env)->NewObject(env,
+                                                                    decodedPduContextClass,
+                                                                    decodedPduContextconstructor,
+                                                                    (*env)->NewStringUTF(env,
+                                                                                         decodedContext->correlationId),
+                                                                    *pdu);
+                if ((*env)->ExceptionOccurred(env)) {
+                    printf("Exception occurred\n\n");
+                    freeDecodedContext(decodedContext);
+                }
+                fflush(stdout);
+                (*env)->CallObjectMethod(env, decodedContextContainer, addDecodedContextMethodId,
+                                         decodedPduContextObject);
+//                printf("PDU Success. | Command Id %d \n", decodedContext->commandId);
+            } else {
+                printf("PDU context is null. | Command Id %d \n", decodedContext->commandId);
+            }
+            freeDecodedContext(decodedContext);
+        } else {
+            printf("NULL decodedPduStructure\n");
+        }
     }
+    free(decodedPduStructList);
+    printf("Returning\n");
+    fflush(stdout);
+    return decodedContextContainer;
+}
 
+jobject
+decodeWithPthread(JNIEnv *env, jobject pduContainerBuffer, jint size, jint correlationIdLength) {
+    printf("Decoding Pthread\n");
+    jlong bufferCapacity = (*env)->GetDirectBufferCapacity(env, pduContainerBuffer);
+    uint8_t *pduBuffers = (uint8_t *) (*env)->GetDirectBufferAddress(env, pduContainerBuffer);
+    ByteBufferContext byteBufferContext = {pduBuffers, 0, bufferCapacity};
+    DirectPduContext *pduContexts = malloc(sizeof(DirectPduContext) * size);
+    int i;
+    int startPosition = 0;
+    for (i = 0; i < size; i++) {
+        char *correlationId = readStringByLength(&byteBufferContext, correlationIdLength);
+        uint32_t pduLength = readUint32(&byteBufferContext);
+        int startIndex = startPosition + correlationIdLength;
+        pduContexts[i].correlationId = correlationId;
+        pduContexts[i].pduBuffer = pduBuffers;
+        pduContexts[i].start = startIndex;
+        pduContexts[i].length = pduLength;
+        startPosition += (correlationIdLength + pduLength);
+        printf("CorrelationId - %s | Read Index - %d |  pdu length -  %d | start-position - %d\n",
+               correlationId, byteBufferContext.readIndex, pduLength, startPosition);
+        byteBufferContext.readIndex = startPosition;
+    }
+    jclass decodedContextContainerClass = jClassCache.arrayListClass;
+    jmethodID decodedContextContainerMethod = jmethodCache.decodedContextContainerMethod;
+    jobject decodedContextContainer = (*env)->NewObject(env, decodedContextContainerClass,
+                                                        decodedContextContainerMethod);
+    jmethodID addDecodedContextMethodId = jmethodCache.addDecodedContextMethodId;
 
     int nThread = N_THREAD;
     int index = 0;
-    int batchSize = pduContextCount > nThread ? pduContextCount / nThread : pduContextCount;
-    DecodedContext *decodedPduStructList = malloc(sizeof(DecodedContext) * pduContextCount);
+    int batchSize = size > nThread ? size / nThread : size;
+    DecodedContext *decodedPduStructList = malloc(sizeof(DecodedContext) * size);
     ThreadParam *threadParams[nThread];
 
     pthread_t threads[nThread];
     int threadIndex = 0;
-    while (index < pduContextCount) {
+    while (index < size) {
         int startIndex = index;
-        int length = (pduContextCount - index) <= batchSize ? (pduContextCount - index) : batchSize;
+        int length = (size - index) <= batchSize ? (size - index) : batchSize;
         index += length;
-        printf("start- %d | end- %d | next start - %d \n", startIndex, startIndex + length, index);
-//       ThreadParam threadParam = threadParams[threadIndex];
         ThreadParam *threadParam = malloc(sizeof(ThreadParam));
         threadParam->startIndex = startIndex;
         threadParam->length = length;
@@ -98,13 +166,10 @@ jobject startDecodingBatch(JNIEnv *env, jobject thisObj, jobject param) {
     for (i = 0; i < threadIndex; i++) {
         pthread_join(threads[i], NULL);
     }
-//    free(threadParams);
-    for (i = 0; i < pduContextCount; i++) {
+
+    for (i = 0; i < size; i++) {
         DecodedContext *decodedContext = &decodedPduStructList[i];
-        PduContext context = pduContexts[i];
         if (decodedContext != 0) {
-//        printf("Not Null decodedPduStructure\n");
-//        printf("SMPP PDU type %d\n", decodedContext->commandId);
             jobject *pdu = createPdu(env, decodedContext);
             if (pdu != 0) {
                 jclass decodedPduContextClass = jClassCache.decodedPduContextClass;
@@ -115,36 +180,29 @@ jobject startDecodingBatch(JNIEnv *env, jobject thisObj, jobject param) {
                                                                     (*env)->NewStringUTF(env,
                                                                                          decodedContext->correlationId),
                                                                     pdu);
-//        printf("Adding decoded PDU context.\n");
                 if ((*env)->ExceptionOccurred(env)) {
                     printf("Exception occurred\n\n");
                     freeDecodedContext(decodedContext);
-                    (*env)->ReleaseStringUTFChars(env, context.correlationIdString, decodedContext->correlationId);
-                    (*env)->ReleaseByteArrayElements(env, context.byteArrayNative, context.pduBuffer, 0);
-                    return;
                 }
-//        printf("Storing decoded PDU context.\n");
                 fflush(stdout);
                 (*env)->CallObjectMethod(env, decodedContextContainer, addDecodedContextMethodId,
                                          decodedPduContextObject);
             } else {
-                printf("PDU context is null.\n");
+                printf("PDU context is null. | Command Id %d \n", decodedContext->commandId);
             }
             freeDecodedContext(decodedContext);
-            (*env)->ReleaseStringUTFChars(env, context.correlationIdString, decodedContext->correlationId);
-            (*env)->ReleaseByteArrayElements(env, context.byteArrayNative, context.pduBuffer, 0);
         } else {
             printf("NULL decodedPduStructure\n");
         }
     }
-
+    free(decodedPduStructList);
     printf("Returning\n");
     fflush(stdout);
     return decodedContextContainer;
 }
 
 jobject *createPdu(JNIEnv *env, DecodedContext *decodedContext) {
-    printf("SMPP PDU type %d\n", decodedContext->commandId);
+//    printf("SMPP PDU type %d\n", decodedContext->commandId);
     if (decodedContext->commandId == 4) {
         SubmitSmReq submitSmReq = *(SubmitSmReq *) decodedContext->pduStruct;
 //        printf("SubmitSm Request - %d\n", submitSmReq.esmClass);
@@ -222,7 +280,106 @@ jobject *createPdu(JNIEnv *env, DecodedContext *decodedContext) {
     return 0;
 }
 
+jobject *createPduOnCuda(JNIEnv *env, CudaDecodedContext *decodedContext) {
+//    printf("SMPP PDU type %d\n", decodedContext->commandId);
+    if (decodedContext->commandId == 4) {
+        CudaSubmitSmReq submitSmReq = decodedContext->pduStruct;
+//        printf("SubmitSm Request - %d\n", submitSmReq.esmClass);
+//        printf("SubmitSm setCommandLength - %ld\n", submitSmReq.header.commandLength);
+        jclass submitSmClass = jClassCache.submitSmClass;
+//        printf("SubmitSm class found - %s\n", submitSmClass);
+
+        jmethodID constructor = jmethodCache.constructor;
+        jobject submitSmObject = (*env)->NewObject(env, submitSmClass, constructor);
+
+//        printf("SubmitSm setCommandLength - %d\n", submitSmReq.header->commandLength);
+        jmethodID setCommandLength = jmethodCache.setCommandLength;
+        (*env)->CallObjectMethod(env, submitSmObject, setCommandLength, submitSmReq.header.commandLength);
+
+//        printf("SubmitSm setCommandStatus - %d\n", submitSmReq.header->commandStatus);
+        jmethodID setCommandStatus = jmethodCache.setCommandStatus;
+        (*env)->CallObjectMethod(env, submitSmObject, setCommandStatus, submitSmReq.header.commandStatus);
+
+//        printf("SubmitSm sequenceNumber - %d\n", submitSmReq.header->sequenceNumber);
+        jmethodID setSequenceNumber = jmethodCache.setSequenceNumber;
+        (*env)->CallObjectMethod(env, submitSmObject, setSequenceNumber, submitSmReq.header.sequenceNumber);
+
+        jmethodID setServiceType = jmethodCache.setServiceType;
+        (*env)->CallObjectMethod(env, submitSmObject, setServiceType,
+                                 (*env)->NewStringUTF(env, submitSmReq.serviceType));
+
+        jmethodID setSourceAddress = jmethodCache.setSourceAddress;
+        jobject *srcAddress = getCudaAddress(env, &submitSmReq.sourceAddress);
+
+        (*env)->CallObjectMethod(env, submitSmObject, setSourceAddress, *srcAddress);
+
+//        printf("SubmitSm Destination Address - %s\n", submitSmReq.destinationAddress->addressValue);
+        jmethodID setDestAddress = jmethodCache.setDestAddress;
+        (*env)->CallObjectMethod(env, submitSmObject, setDestAddress, *getCudaAddress(env, &submitSmReq.destinationAddress));
+
+        jmethodID setEsmClass = jmethodCache.setEsmClass;
+        (*env)->CallObjectMethod(env, submitSmObject, setEsmClass, submitSmReq.esmClass);
+
+        jmethodID setProtocolId = jmethodCache.setProtocolId;
+        (*env)->CallObjectMethod(env, submitSmObject, setProtocolId, submitSmReq.protocolId);
+
+        jmethodID setPriority = jmethodCache.setPriority;
+        (*env)->CallObjectMethod(env, submitSmObject, setPriority, submitSmReq.priority);
+
+        jmethodID setScheduleDeliveryTime = jmethodCache.setScheduleDeliveryTime;
+        (*env)->CallObjectMethod(env, submitSmObject, setScheduleDeliveryTime,
+                                 (*env)->NewStringUTF(env, submitSmReq.scheduleDeliveryTime));
+
+        jmethodID setValidityPeriod = jmethodCache.setValidityPeriod;
+        (*env)->CallObjectMethod(env, submitSmObject, setValidityPeriod,
+                                 (*env)->NewStringUTF(env, submitSmReq.validityPeriod));
+
+        jmethodID setRegisteredDelivery = jmethodCache.setRegisteredDelivery;
+        (*env)->CallObjectMethod(env, submitSmObject, setRegisteredDelivery, submitSmReq.registeredDelivery);
+
+        jmethodID setReplaceIfPresent = jmethodCache.setReplaceIfPresent;
+        (*env)->CallObjectMethod(env, submitSmObject, setReplaceIfPresent, submitSmReq.replaceIfPresent);
+
+
+        jmethodID setDataCoding = jmethodCache.setDataCoding;
+        (*env)->CallObjectMethod(env, submitSmObject, setDataCoding, submitSmReq.dataCoding);
+
+
+        jmethodID setDefaultMsgId = jmethodCache.setDefaultMsgId;
+        (*env)->CallObjectMethod(env, submitSmObject, setDefaultMsgId, submitSmReq.defaultMsgId);
+
+        if (submitSmReq.smLength > 0) {
+            jmethodID setShortMessage = jmethodCache.setShortMessage;
+            jbyteArray shortMsgArray = (*env)->NewByteArray(env, submitSmReq.smLength);
+            (*env)->SetByteArrayRegion(env, shortMsgArray, 0, submitSmReq.smLength, submitSmReq.shortMessage);
+            (*env)->CallObjectMethod(env, submitSmObject, setShortMessage, shortMsgArray);
+        }
+        return &submitSmObject;
+    }
+    return 0;
+}
+
 jobject *getAddress(JNIEnv *env, Address *address) {
+
+    jclass addressClass = jClassCache.addressClass;
+
+    jmethodID addressConstructor = jmethodCache.addressConstructor;
+    jobject addressObject = (*env)->NewObject(env, addressClass, addressConstructor);
+
+    jmethodID setTon = jmethodCache.setTon;
+    (*env)->CallObjectMethod(env, addressObject, setTon, address->ton);
+
+    jmethodID setNpi = jmethodCache.setNpi;
+    (*env)->CallObjectMethod(env, addressObject, setNpi, address->npi);
+
+    jmethodID setAddress = jmethodCache.setAddress;
+    jstring addressJstring = (*env)->NewStringUTF(env, address->addressValue);
+    (*env)->CallObjectMethod(env, addressObject, setAddress, addressJstring);
+
+    return &addressObject;
+}
+
+jobject *getCudaAddress(JNIEnv *env, CudaAddress *address) {
 
     jclass addressClass = jClassCache.addressClass;
 

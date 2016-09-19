@@ -569,7 +569,7 @@ public class DefaultSmppSession implements SmppServerSession, SmppSessionChannel
         // we need to log the PDU after encoding since some things only happen
         // during the encoding process such as looking up the result message
         if (configuration.getLoggingOptions().isLogPduEnabled()) {
-            logger.info("send PDU: {}", pdu);
+//            logger.info("send PDU: {}", pdu);
         }
 
         // write the pdu out & wait timeout amount of time
@@ -586,12 +586,12 @@ public class DefaultSmppSession implements SmppServerSession, SmppSessionChannel
     @Override
     public void firePduReceived(Pdu pdu) {
         if (configuration.getLoggingOptions().isLogPduEnabled()) {
-            logger.info("received PDU: {}", pdu);
+//            logger.info("received PDU: {}", pdu);
         }
 
         if(this.sessionHandler instanceof SmppSessionListener) {
             if(!((SmppSessionListener)this.sessionHandler).firePduReceived(pdu)){
-                logger.info("recieved PDU discarded: {}", pdu);
+//                logger.info("recieved PDU discarded: {}", pdu);
                 return;
             }
         }

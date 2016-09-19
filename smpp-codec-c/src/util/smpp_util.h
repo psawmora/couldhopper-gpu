@@ -3,16 +3,10 @@ Copyright (c) 2016 Prabath Weerasinghe - MSC Project - SMPP Codec. All rights re
 Created by prabath on 6/26/16.
 */
 
-#include "smpp_pdu_struct.h"
+#include "pdu_common_struct.h"
 
 #ifndef SMPP_CODEC_C_SMPP_UTIL_H
 #define SMPP_CODEC_C_SMPP_UTIL_H
-
-typedef struct byte_buffer_context_struct {
-    uint8_t *buffer;
-    uint64_t readIndex;
-    uint64_t limit;
-} ByteBufferContext;
 
 uint8_t readUint8(ByteBufferContext *pduBufferContext);
 
@@ -21,6 +15,8 @@ uint32_t readUint32(ByteBufferContext *pduBufferContext);
 char *readString(ByteBufferContext *pduBufferContext, int startIndex, int endIndex);
 
 char *readNullTerminatedString(ByteBufferContext *pduBufferContext, int maxLength);
+
+char *readStringByLength(ByteBufferContext *pduBufferContext, int length);
 
 uint8_t *readNBytes(ByteBufferContext *pduBufferContext, int length);
 

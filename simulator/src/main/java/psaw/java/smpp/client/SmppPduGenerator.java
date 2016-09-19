@@ -5,10 +5,7 @@ import com.cloudhopper.smpp.SmppSessionConfiguration;
 import com.cloudhopper.smpp.SmppSessionHandler;
 import com.cloudhopper.smpp.impl.DefaultSmppClient;
 import com.cloudhopper.smpp.pdu.SubmitSm;
-import com.cloudhopper.smpp.type.RecoverablePduException;
-import com.cloudhopper.smpp.type.SmppChannelException;
-import com.cloudhopper.smpp.type.SmppTimeoutException;
-import com.cloudhopper.smpp.type.UnrecoverablePduException;
+import com.cloudhopper.smpp.type.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import psaw.java.smpp.service.SmppClientConfiguration;
@@ -130,6 +127,7 @@ public class SmppPduGenerator {
 
     public void sendSubmitSm(SubmitSm submitSm, long timeout) {
         try {
+            submitSm.setSourceAddress(new Address((byte) 1, (byte) 2, smppClientConfiguration.getClientAddress()));
             session.sendRequestPdu(submitSm, timeout, false);
             TpsLogger.getInstance().logRequestSent(submitSm);
         } catch (RecoverablePduException
