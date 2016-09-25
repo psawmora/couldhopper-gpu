@@ -9,7 +9,7 @@ Created by prabath on 6/26/16.
 #include "smpp_util.h"
 
 int str_len(const char *str) {
-    printf("char - %c | ", *str);
+//    printf("char - %c | ", *str);
     return (*str) ? str_len(++str) + 1 : 0;
 }
 

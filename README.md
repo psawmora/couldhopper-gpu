@@ -7,3 +7,5 @@ Cloudhoppe-GPU deligates the decoding to a GPU and tries to gain a higher throug
 
 The project uses JNI for communicating with the C implementation. 
 As the project moves on, the README would be updated accordingly.
+
+LD_LIBRARY_PATH=/usr/local/cuda/lib64

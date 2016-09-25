@@ -129,6 +129,7 @@ public class SmppPduGenerator {
         try {
             submitSm.setSourceAddress(new Address((byte) 1, (byte) 2, smppClientConfiguration.getClientAddress()));
             session.sendRequestPdu(submitSm, timeout, false);
+            session.getSendWindow().complete(submitSm.getSequenceNumber(), submitSm.createResponse());
             TpsLogger.getInstance().logRequestSent(submitSm);
         } catch (RecoverablePduException
                 | UnrecoverablePduException

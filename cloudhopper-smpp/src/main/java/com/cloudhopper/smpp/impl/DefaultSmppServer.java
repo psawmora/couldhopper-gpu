@@ -51,10 +51,7 @@ import javax.management.ObjectName;
 import java.lang.management.ManagementFactory;
 import java.net.InetSocketAddress;
 import java.util.Timer;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.cloudhopper.smpp.channel.SmppChannelConstants.PIPELINE_SESSION_PDU_DECODER_NAME;
@@ -187,6 +184,17 @@ public class DefaultSmppServer implements SmppServer, DefaultSmppServerMXBean {
     public DefaultSmppServer(final SmppServerConfiguration configuration, SmppServerHandler serverHandler,
                              ExecutorService executor, ScheduledExecutorService monitorExecutor,
                              boolean isAsynchrounous, int threadCount) {
+        this(configuration, serverHandler, executor, monitorExecutor, isAsynchrounous, threadCount, 1);
+    }
+
+    public DefaultSmppServer(SmppServerConfiguration configuration,
+                             SmppServerHandler serverHandler,
+                             ExecutorService executor,
+                             ScheduledExecutorService monitorExecutor,
+                             boolean isAsynchrounous,
+                             int threadCount,
+                             int maxBatchSize) {
+
         this.configuration = configuration;
         // the same group we'll put every server channel
         this.channels = new DefaultChannelGroup();
@@ -222,7 +230,7 @@ public class DefaultSmppServer implements SmppServer, DefaultSmppServerMXBean {
         this.counters = new DefaultSmppServerCounters();
         this.asynchExecutorService = Executors.newFixedThreadPool(threadCount);
         this.isAsynchrounous = isAsynchrounous;
-        this.asynchronousDecoder = new DefaultAsynchronousDecoder(this.getTranscoder(), asynchExecutorService);
+        this.asynchronousDecoder = new DefaultAsynchronousDecoder(this.getTranscoder(), asynchExecutorService, maxBatchSize);
         this.asynchrounousFrameDecoder = new AsynchrounousFrameDecoder(transcoder);
         if (configuration.isJmxEnabled()) {
             registerMBean();
@@ -432,7 +440,7 @@ public class DefaultSmppServer implements SmppServer, DefaultSmppServerMXBean {
                     .replace(PIPELINE_SESSION_PDU_DECODER_NAME, PIPELINE_SESSION_PDU_DECODER_NAME,
                             new AsynchrounousFrameDecoder(transcoder));
             channel.getPipeline()
-                    .addLast( SmppChannelConstants.PIPELINE_SESSION_WRAPPER_NAME,
+                    .addLast(SmppChannelConstants.PIPELINE_SESSION_WRAPPER_NAME,
                             new AsynchronousSmppSessionWrapper(session, asynchronousDecoder, null));
         } else {
             logger.info("Changing the Session Wrapper to a sequential handler.");

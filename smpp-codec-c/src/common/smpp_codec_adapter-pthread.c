@@ -1,3 +1,4 @@
+#include <time.h>
 
 #include "smpp_util.h"
 #include "smpp_pdu_struct.h"
@@ -33,6 +34,9 @@ static JmethodCache jmethodCache;
 
 static JfieldCache jfieldCache;
 
+static time_t start_t, end_t;
+static double diff_t;
+
 JNIEXPORT void JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder_initialize
         (JNIEnv *env, jobject thisObj) {
     printf("Caching JClass , JMethodId and JFieldId values.\n");
@@ -43,6 +47,7 @@ JNIEXPORT void JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_Default
 
 JNIEXPORT jobject JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder_decodePDUDirect
         (JNIEnv *env, jobject thisObj, jobject pduContainerBuffer, jint size, jint correlationIdLength) {
+    time(&start_t);
     return decodePduDirect(env, pduContainerBuffer, size, correlationIdLength);
 }
 
@@ -62,8 +67,10 @@ decodeWithCuda(JNIEnv *env, jobject pduContainerBuffer, jint size, jint correlat
         strncpy(pduContexts[i].correlationId, correlationId, sizeof(char) * (correlationIdLength + 1));
         pduContexts[i].start = (uint32_t) startIndex;
         pduContexts[i].length = pduLength;
+/*
         printf("CorrelationId 1 - %s | CorrelationId 2 - %s | start-position - %d| pdu length -  %d | Read Index - %ld \n",
                correlationId, pduContexts[i].correlationId, startPosition, pduLength, byteBufferContext.readIndex);
+*/
         startPosition += (correlationIdLength + pduLength);
         byteBufferContext.readIndex = (uint64_t) startPosition;
     }
@@ -78,7 +85,10 @@ decodeWithCuda(JNIEnv *env, jobject pduContainerBuffer, jint size, jint correlat
     CudaMetadata metadata = {size, pduBuffers, pduContexts, decodedPduStructList, (uint64_t) bufferCapacity};
 //    fflush(stdout);
     decodeCuda(metadata);
-    for (i = 0; i < size; i++) {
+    time(&end_t);
+    diff_t = difftime(end_t, start_t);
+    printf("Cuda Decoding Completed - TimeTaken - %f\n", diff_t);
+    for (i = 0; i < 1; i++) {
         CudaDecodedContext *decodedContext = &decodedPduStructList[i];
         if (decodedContext != 0) {
             jobject *pdu = createPduOnCuda(env, decodedContext);
@@ -102,12 +112,12 @@ decodeWithCuda(JNIEnv *env, jobject pduContainerBuffer, jint size, jint correlat
             } else {
                 printf("PDU context is null. | Command Id %d \n", decodedContext->commandId);
             }
-            freeDecodedContext(decodedContext);
         } else {
             printf("NULL decodedPduStructure\n");
         }
     }
     free(decodedPduStructList);
+    free(pduContexts);
     printf("Returning\n");
     fflush(stdout);
     return decodedContextContainer;
@@ -131,8 +141,10 @@ decodeWithPthread(JNIEnv *env, jobject pduContainerBuffer, jint size, jint corre
         pduContexts[i].start = startIndex;
         pduContexts[i].length = pduLength;
         startPosition += (correlationIdLength + pduLength);
+/*
         printf("CorrelationId - %s | Read Index - %d |  pdu length -  %d | start-position - %d\n",
                correlationId, byteBufferContext.readIndex, pduLength, startPosition);
+*/
         byteBufferContext.readIndex = startPosition;
     }
     jclass decodedContextContainerClass = jClassCache.arrayListClass;
@@ -167,7 +179,10 @@ decodeWithPthread(JNIEnv *env, jobject pduContainerBuffer, jint size, jint corre
         pthread_join(threads[i], NULL);
     }
 
-    for (i = 0; i < size; i++) {
+    time(&end_t);
+    diff_t = difftime(end_t, start_t);
+    printf("Pthread Decoding Completed - TimeTaken - %f\n", diff_t);
+    for (i = 0; i < 1; i++) {
         DecodedContext *decodedContext = &decodedPduStructList[i];
         if (decodedContext != 0) {
             jobject *pdu = createPdu(env, decodedContext);
@@ -190,12 +205,12 @@ decodeWithPthread(JNIEnv *env, jobject pduContainerBuffer, jint size, jint corre
             } else {
                 printf("PDU context is null. | Command Id %d \n", decodedContext->commandId);
             }
-            freeDecodedContext(decodedContext);
         } else {
             printf("NULL decodedPduStructure\n");
         }
     }
     free(decodedPduStructList);
+    free(pduContexts);
     printf("Returning\n");
     fflush(stdout);
     return decodedContextContainer;

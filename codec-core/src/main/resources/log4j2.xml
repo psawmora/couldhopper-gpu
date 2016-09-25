@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Configuration status="debug">
+
+    <Properties>
+        <Property name="log-path">/logs/smpp-server</Property>
+        <Property name="log-pattern">%d{yyyy-MM-dd HH:mm:ss,SSS} %p %c{1} [%X{correlation-id}][%X{remote-tx-id}] %m%n</Property>
+        <Property name="log-rotate-pattern">%d{yyyy-MM-dd-HH:mm}.log</Property>
+    </Properties>
+
+    <Appenders>
+        <RollingFile name="debug" fileName="${log-path}/debug.log"
+                     filePattern="${log-path}/debug-${log-rotate-pattern}">
+            <PatternLayout pattern="${log-pattern}"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="15" modulate="true"/>
+            </Policies>
+        </RollingFile>
+
+        <RollingFile name="tps-logger" fileName="${log-path}/tps.log"
+                     filePattern="${log-path}/tps-${log-rotate-pattern}">
+            <PatternLayout pattern="%m%n"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="15" modulate="true"/>
+            </Policies>
+        </RollingFile>
+
+        <RollingFile name="error" fileName="${log-path}/error.log"
+                     filePattern="${log-path}/error-${log-rotate-pattern}">
+            <PatternLayout pattern="${log-pattern}"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="15" modulate="true"/>
+            </Policies>
+        </RollingFile>
+
+        <RollingFile name="info" fileName="${log-path}/info.log"
+                     filePattern="${log-path}/info-${log-rotate-pattern}">
+            <PatternLayout pattern="${log-pattern}"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="15" modulate="true"/>
+            </Policies>
+        </RollingFile>
+    </Appenders>
+
+    <Loggers>
+
+        <Logger name="psaw.java" additivity="false" level="debug">
+            <appender-ref ref="debug" level="debug"/>
+            <appender-ref ref="info" level="info"/>
+            <appender-ref ref="error" level="error"/>
+        </Logger>
+
+        <Logger name="TPS_LOGGER" additivity="false" level="debug">
+            <appender-ref ref="tps-logger" level="debug"/>
+        </Logger>
+
+        <Logger name="org.springframework" additivity="false" level="error">
+            <appender-ref ref="debug" level="debug"/>
+            <appender-ref ref="error" level="error"/>
+        </Logger>
+
+        <Root level="debug">
+            <appender-ref ref="debug" level="debug"/>
+            <appender-ref ref="info" level="info"/>
+            <appender-ref ref="error" level="error"/>
+        </Root>
+    </Loggers>
+</Configuration>

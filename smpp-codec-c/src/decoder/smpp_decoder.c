@@ -24,12 +24,12 @@ void *decode(void *threadParam) {
     int length = context->length;
     int startIndex = context->startIndex;
     int i = startIndex;
-    printf("Id %d - Start - %d | End - %d\n", x, i, startIndex + length);
+//    printf("Id %d - Start - %d | End - %d\n", x, i, startIndex + length);
     for (i = startIndex; i < startIndex + length; i++) {
         void *decodedPduStruct = decodeSingle(&pduContexts[i]);
         if (decodedPduStruct != 0) {
             DecodedContext *decodedContext = (DecodedContext *) decodedPduStruct;
-            printf("Command-Id %d \n", decodedContext->commandId);
+//            printf("Command-Id %d \n", decodedContext->commandId);
             decodedPduStructList[i] = *decodedContext;
         } else {
             printf("DecodedPduContext is NULL. PDU Id - %d  |  %s |\n", i, pduContexts[i].correlationId);
@@ -41,7 +41,7 @@ void *decode(void *threadParam) {
 void *decodeSingle(DirectPduContext *pduContext) {
     char *correlationId = pduContext->correlationId;
     int length = pduContext->length;
-    printf("Started decoding - %d\n", length);
+//    printf("Started decoding - %d\n", length);
     int startIndex = pduContext->start;
     uint8_t *pduBuffer = pduContext->pduBuffer;
 //    printf("Correlation Id - %s\n", correlationId);
@@ -57,11 +57,11 @@ void *decodeSingle(DirectPduContext *pduContext) {
     smppHeader->commandStatus = readUint32(bufferContext);
     smppHeader->sequenceNumber = readUint32(bufferContext);
 
-    printf("Limit - %ld\n", bufferContext->limit);
+   /* printf("Limit - %ld\n", bufferContext->limit);
     printf("CommandLength - %d\n", smppHeader->commandLength);
     printf("CommandId - %d\n", smppHeader->commandId);
     printf("CommandStatus - %d\n", smppHeader->commandStatus);
-    printf("SequenceNumber - %d\n", smppHeader->sequenceNumber);
+    printf("SequenceNumber - %d\n", smppHeader->sequenceNumber);*/
     if (smppHeader->commandId == 4) {
         SubmitSmReq *submitSmReq = decodeSubmitSm(pduContext, bufferContext);
         submitSmReq->header = smppHeader;
@@ -115,7 +115,9 @@ SubmitSmReq *decodeSubmitSm(PduContext *pduContext, ByteBufferContext *context) 
 }
 
 void printAddress(Address *address) {
+/*
     printf("ton - %d\n", address->ton);
     printf("npi - %d\n", address->npi);
     printf("address - %s\n", (char *) address->addressValue);
+*/
 }

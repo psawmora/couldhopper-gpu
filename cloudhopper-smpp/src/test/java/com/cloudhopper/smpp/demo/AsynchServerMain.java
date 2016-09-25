@@ -83,7 +83,7 @@ public class AsynchServerMain {
 
         // create a server, start it up
         DefaultSmppServer smppServer =
-                new DefaultSmppServer(configuration, new DefaultSmppServerHandler(), executor, monitorExecutor, true, 1);
+                new DefaultSmppServer(configuration, new DefaultSmppServerHandler(), executor, monitorExecutor, true, 1, 1000);
 
         logger.info("Starting SMPP server...");
         smppServer.start();
@@ -144,9 +144,9 @@ public class AsynchServerMain {
         @Override
         public PduResponse firePduRequestReceived(PduRequest pduRequest) {
             SmppSession session = sessionRef.get();
-//            System.out.println("Request received " + pduRequest.getCommandId());
+            //            System.out.println("Request received " + pduRequest.getCommandId());
             if (pduRequest instanceof SubmitSm) {
-//                System.out.println("Request received " + new String(((SubmitSm) pduRequest).getShortMessage()));
+                //                System.out.println("Request received " + new String(((SubmitSm) pduRequest).getShortMessage()));
             }
             // mimic how long processing could take on a slower smsc
             try {

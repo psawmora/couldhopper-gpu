@@ -4,7 +4,6 @@ import com.cloudhopper.smpp.impl.SmppSessionChannelListener;
 import com.cloudhopper.smpp.pdu.Pdu;
 import com.cloudhopper.smpp.transcoder.PduTranscoder;
 import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.buffer.ChannelBuffers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,8 +17,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import static java.nio.ByteOrder.BIG_ENDIAN;
-
 /**
  * <p>
  * <code>DefaultAsynchronousDecoder</code> -
@@ -31,6 +28,8 @@ import static java.nio.ByteOrder.BIG_ENDIAN;
 public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
 
     private static final Logger logger = LoggerFactory.getLogger(DefaultAsynchronousDecoder.class);
+
+    public static int MAX_PDU_LENGTH = 500;
 
     private Map<String, SmppSessionChannelListener> sessionChannelListeners;
 
@@ -44,11 +43,9 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
 
     private ReentrantReadWriteLock.WriteLock writeLock;
 
-    private ChannelBuffer pduContainerBuffer;
-
     private ByteBuffer pduContainerBufferActive;
 
-    private int batchSize = 200000  ;
+    private int batchSize = 200000;
 
     private AtomicInteger currentBatchSize;
 
@@ -64,7 +61,7 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
         System.loadLibrary("SMPPDecoder");
     }
 
-    public DefaultAsynchronousDecoder(PduTranscoder pduTranscoder, ExecutorService executorService) {
+    public DefaultAsynchronousDecoder(PduTranscoder pduTranscoder, ExecutorService executorService, int batchSize) {
         this.pduTranscoder = pduTranscoder;
         this.sessionChannelListeners = new ConcurrentHashMap<>();
         this.executorService = executorService;
@@ -73,11 +70,8 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
         this.readLock = readWriteLock.readLock();
         this.writeLock = readWriteLock.writeLock();
         this.currentBatchSize = new AtomicInteger(0);
-        this.pduContainerBuffer = ChannelBuffers.directBuffer(BIG_ENDIAN, 1024 * 1024 * 1);
-        //        this.pduContainerBufferSecondary = ChannelBuffers.directBuffer(BIG_ENDIAN, 1024 * 1024 * 1000);
-        //        this.pduContainerBufferActive = pduContainerBuffer;
-        this.pduContainerBufferActive = ByteBuffer.allocateDirect(75 * 300000);
-        //        this.pduContainerBufferActive = ByteBuffer.allocateDirect(1024 * 1024 * 50);
+        this.batchSize = batchSize;
+        this.pduContainerBufferActive = ByteBuffer.allocateDirect(MAX_PDU_LENGTH * batchSize);
         initialize();
     }
 
@@ -94,43 +88,40 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
     }
 
     private Future<?> sendAsynch(final AsynchronousContext asynchronousContext, final SmppSessionChannelListener listener) {
-        return executorService.submit(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    ChannelBuffer buffer = asynchronousContext.getChannelBuffer();
-                    buffer.markReaderIndex();
-                    buffer.skipBytes(4);
-                    int type = buffer.readInt();
-                    buffer.resetReaderIndex();
-                    if (type != 4) {
-                        ChannelBuffer channelBuffer = asynchronousContext.getChannelBuffer();
-                        try {
-                            Pdu pdu = pduTranscoder.decode(channelBuffer);
-                            listener.firePduReceived(pdu);
-                        } catch (Exception e) {
-                            logger.error("Recoverable exception", e);
-                        }
-                        return;
+        return executorService.submit(() -> {
+            try {
+                ChannelBuffer buffer = asynchronousContext.getChannelBuffer();
+                buffer.markReaderIndex();
+                buffer.skipBytes(4);
+                int type = buffer.readInt();
+                buffer.resetReaderIndex();
+                if (type != 4) {
+                    ChannelBuffer channelBuffer = asynchronousContext.getChannelBuffer();
+                    try {
+                        Pdu pdu1 = pduTranscoder.decode(channelBuffer);
+                        listener.firePduReceived(pdu1);
+                    } catch (Exception e) {
+                        logger.error("Recoverable exception", e);
                     }
-                    if (currentBatchSize.compareAndSet(batchSize, 0)) {
-                        logger.debug("Sending the batch to the decoder");
-                        List<DecodedPduContext> decodedPduContexts =
-                                decodePDUDirect(pduContainerBufferActive, batchSize, 15);
-//                        System.out.println(new String(((SubmitSm) decodedPduContexts.get(0).getPdu()).getShortMessage()));
-                        pduContainerBufferActive.position(0);
-                        notifyListeners(decodedPduContexts);
-                    } else {
-                        pdu = asynchronousContext.getChannelBuffer().copy();
-                        String channelId = asynchronousContext.getChannelId();
-                        pduContainerBufferActive.put(channelId.getBytes());
-                        pduContainerBufferActive.put(pdu.toByteBuffer(pdu.readerIndex(), pdu.readableBytes()));
-                        currentBatchSize.incrementAndGet();
-                    }
-                } catch (Exception e) {
-                    logger.error("Error occurred while decoding the ChannelBuffer", e);
-                    listener.fireExceptionThrown(e);
+                    return;
                 }
+                if (currentBatchSize.compareAndSet(batchSize, 0)) {
+                    logger.debug("Sending the batch to the decoder");
+                    System.out.println("Sending the batch to the decoder");
+                    List<DecodedPduContext> decodedPduContexts = decodePDUDirect(pduContainerBufferActive, batchSize, 15);
+                    System.out.println("Got Response " + decodedPduContexts.size());
+                    pduContainerBufferActive.position(0);
+                    notifyListeners(decodedPduContexts);
+                } else {
+                    pdu = asynchronousContext.getChannelBuffer().copy();
+                    String channelId = asynchronousContext.getChannelId();
+                    pduContainerBufferActive.put(channelId.getBytes());
+                    pduContainerBufferActive.put(pdu.toByteBuffer(pdu.readerIndex(), pdu.readableBytes()));
+                    currentBatchSize.incrementAndGet();
+                }
+            } catch (Exception e) {
+                logger.error("Error occurred while decoding the ChannelBuffer", e);
+                listener.fireExceptionThrown(e);
             }
         });
     }
@@ -159,5 +150,9 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
 
     public void setPduTranscoder(PduTranscoder pduTranscoder) {
         this.pduTranscoder = pduTranscoder;
+    }
+
+    public void setBatchSize(int batchSize) {
+        this.batchSize = batchSize;
     }
 }

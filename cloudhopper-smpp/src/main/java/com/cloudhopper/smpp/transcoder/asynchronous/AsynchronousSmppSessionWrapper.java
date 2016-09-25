@@ -30,7 +30,7 @@ public class AsynchronousSmppSessionWrapper extends SimpleChannelUpstreamHandler
                                           String channelId) {
         this.listener = listener;
         this.asynchronousDecoder = asynchronousDecoder;
-        this.channelId = channelId == null ? String.valueOf(System.nanoTime()) : channelId;
+        this.channelId = channelId == null ? ChannelIdUtil.getChannelId() : channelId;
         this.asynchronousDecoder.registerSessionListener(this.channelId, listener);
     }
 

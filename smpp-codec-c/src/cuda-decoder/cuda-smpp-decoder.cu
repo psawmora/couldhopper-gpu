@@ -16,7 +16,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort =
 			exit(code);
 	}
 }
-__shared__ CudaPduContext directPduContext[512];
+__shared__ CudaPduContext directPduContext[1024];
 
 __global__ void launchDecode(int nPduContext, CudaPduContext *pduContexts,
 		CudaDecodedContext *decodedPduStructList, uint8_t *pduBuffer) {
@@ -97,7 +97,7 @@ void decodeCuda(CudaMetadata cudaMetadata) {
 			testContext->correlationId, nPduContext,
 			cudaMetadata.pduBufferLength);*/
 
-	launchDecode<<<512, 512>>>(nPduContext, pduContexts_d, decodedPduStructList_d,
+	launchDecode<<<5000, 1024>>>(nPduContext, pduContexts_d, decodedPduStructList_d,
 			pduBuffer_d);
 	gpuErrchk(cudaPeekAtLastError());
 	cudaDeviceSynchronize();
