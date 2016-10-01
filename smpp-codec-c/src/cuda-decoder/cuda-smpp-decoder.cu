@@ -47,8 +47,8 @@ __global__ void launchDecode(int nPduContext, CudaPduContext *pduContexts,
 			CudaPduContext* cudaPduContext = &directPduContext[threadIdx.x
 					+ (i - start)];
 //        	printf("CUDA - Correlation Id %s | Length - %d\n",pduContexts[0].correlationId,pduContexts[0].start);
-			decodeSinglePdu(&directPduContext[threadIdx.x + (i - start)], &decodedPduStructList[i],
-					pduBuffer);
+			decodeSinglePdu(&directPduContext[threadIdx.x + (i - start)],
+					&decodedPduStructList[i], pduBuffer);
 		}
 	}
 }
@@ -57,6 +57,21 @@ void cudaTest() {
 	printf("Cuda SMPP decoding completed\n");
 
 }
+
+CudaPduContext *allocatePinnedPduContext(int length) {
+	CudaPduContext *pduContexts;
+	gpuErrchk(cudaMallocHost((void**)&pduContexts, sizeof(CudaPduContext)*length));
+	return pduContexts;
+}
+
+void freePinndedPduContext(int length,	CudaPduContext *pduContexts){
+	cudaFreeHost(pduContexts);	
+}
+
+void freePinndedDecodedContext(int length,	CudaDecodedContext *decodedPduStructList){
+	cudaFreeHost(decodedPduStructList);	
+}
+
 void decodeCuda(CudaMetadata cudaMetadata) {
 
 	CudaPduContext *pduContexts = cudaMetadata.cudaPduContexts;
@@ -84,22 +99,22 @@ void decodeCuda(CudaMetadata cudaMetadata) {
 	gpuErrchk(
 			cudaMalloc((void ** ) &decodedPduStructList_d,
 					sizeof(CudaDecodedContext) * nPduContext));
-	gpuErrchk(
+	/*gpuErrchk(
 			cudaMemcpy(decodedPduStructList_d, decodedPduStructList,
 					sizeof(CudaDecodedContext) * nPduContext,
-					cudaMemcpyHostToDevice));
+					cudaMemcpyHostToDevice));*/
 
 	CudaPduContext *testContext = (CudaPduContext *) malloc(
 			sizeof(CudaPduContext));
 	memcpy(testContext, &pduContexts[0], sizeof(CudaPduContext));
 	/*printf(
-			"Before launch Correlation Id %s | pdu count %d | buffer length %d\n",
-			testContext->correlationId, nPduContext,
-			cudaMetadata.pduBufferLength);*/
+	 "Before launch Correlation Id %s | pdu count %d | buffer length %d\n",
+	 testContext->correlationId, nPduContext,
+	 cudaMetadata.pduBufferLength);*/
 
-	launchDecode<<<5000, 1024>>>(nPduContext, pduContexts_d, decodedPduStructList_d,
+launchDecode<<<10000, 1024>>>(nPduContext, pduContexts_d, decodedPduStructList_d,
 			pduBuffer_d);
-	gpuErrchk(cudaPeekAtLastError());
+			gpuErrchk(cudaPeekAtLastError());
 	cudaDeviceSynchronize();
 	gpuErrchk(
 			cudaMemcpy(decodedPduStructList, decodedPduStructList_d,

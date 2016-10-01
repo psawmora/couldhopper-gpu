@@ -29,7 +29,7 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
 
     private static final Logger logger = LoggerFactory.getLogger(DefaultAsynchronousDecoder.class);
 
-    public static int MAX_PDU_LENGTH = 500;
+    public static int MAX_PDU_LENGTH = 100;
 
     private Map<String, SmppSessionChannelListener> sessionChannelListeners;
 

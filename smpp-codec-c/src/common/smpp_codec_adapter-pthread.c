@@ -36,6 +36,8 @@ static JfieldCache jfieldCache;
 
 static time_t start_t, end_t;
 static double diff_t;
+static struct timespec tstart={0,0}, tend={0,0};
+
 
 JNIEXPORT void JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder_initialize
         (JNIEnv *env, jobject thisObj) {
@@ -48,6 +50,7 @@ JNIEXPORT void JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_Default
 JNIEXPORT jobject JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder_decodePDUDirect
         (JNIEnv *env, jobject thisObj, jobject pduContainerBuffer, jint size, jint correlationIdLength) {
     time(&start_t);
+    clock_gettime(CLOCK_MONOTONIC, &tstart);
     return decodePduDirect(env, pduContainerBuffer, size, correlationIdLength);
 }
 
@@ -57,7 +60,8 @@ decodeWithCuda(JNIEnv *env, jobject pduContainerBuffer, jint size, jint correlat
     jlong bufferCapacity = (*env)->GetDirectBufferCapacity(env, pduContainerBuffer);
     uint8_t *pduBuffers = (uint8_t *) (*env)->GetDirectBufferAddress(env, pduContainerBuffer);
     ByteBufferContext byteBufferContext = {pduBuffers, 0, (uint64_t) bufferCapacity};
-    CudaPduContext *pduContexts = malloc(sizeof(CudaPduContext) * size);
+//    CudaPduContext *pduContexts = malloc(sizeof(CudaPduContext) * size);
+    CudaPduContext *pduContexts = allocatePinnedPduContext(size);
     int i;
     int startPosition = 0;
     for (i = 0; i < size; i++) {
@@ -86,8 +90,13 @@ decodeWithCuda(JNIEnv *env, jobject pduContainerBuffer, jint size, jint correlat
 //    fflush(stdout);
     decodeCuda(metadata);
     time(&end_t);
+    clock_gettime(CLOCK_MONOTONIC, &tend);
     diff_t = difftime(end_t, start_t);
-    printf("Cuda Decoding Completed - TimeTaken - %f\n", diff_t);
+//    printf("Cuda Decoding Completed - TimeTaken - %f\n", diff_t);
+    printf("Cuda Decoding Completed - TimeTaken %.5f \n",
+           ((double)tend.tv_sec + 1.0e-9*tend.tv_nsec) -
+           ((double)tstart.tv_sec + 1.0e-9*tstart.tv_nsec));
+
     for (i = 0; i < 1; i++) {
         CudaDecodedContext *decodedContext = &decodedPduStructList[i];
         if (decodedContext != 0) {
@@ -117,7 +126,7 @@ decodeWithCuda(JNIEnv *env, jobject pduContainerBuffer, jint size, jint correlat
         }
     }
     free(decodedPduStructList);
-    free(pduContexts);
+    freePinndedPduContext(size, pduContexts);
     printf("Returning\n");
     fflush(stdout);
     return decodedContextContainer;
@@ -180,8 +189,12 @@ decodeWithPthread(JNIEnv *env, jobject pduContainerBuffer, jint size, jint corre
     }
 
     time(&end_t);
+clock_gettime(CLOCK_MONOTONIC, &tend);
     diff_t = difftime(end_t, start_t);
-    printf("Pthread Decoding Completed - TimeTaken - %f\n", diff_t);
+//    printf("Cuda Decoding Completed - TimeTaken - %f\n", diff_t);
+    printf("Pthread Decoding Completed - TimeTaken %.5f \n",
+           ((double)tend.tv_sec + 1.0e-9*tend.tv_nsec) -
+           ((double)tstart.tv_sec + 1.0e-9*tstart.tv_nsec));
     for (i = 0; i < 1; i++) {
         DecodedContext *decodedContext = &decodedPduStructList[i];
         if (decodedContext != 0) {
