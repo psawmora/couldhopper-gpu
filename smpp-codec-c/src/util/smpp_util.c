@@ -20,6 +20,17 @@ uint8_t readUint8(ByteBufferContext *pduBufferContext) {
     return value;
 }
 
+uint16_t readUint16(ByteBufferContext *pduBufferContext) {
+    uint8_t *buffer = pduBufferContext->buffer + pduBufferContext->readIndex;
+    uint16_t value = (buffer[0] & 255) << 8 | (buffer[1] & 255);
+/*
+    printf("readUint16 - Read Index - %d | Limit - %d | Int Value %d\n", pduBufferContext->readIndex, pduBufferContext->limit,
+           value);
+*/
+    pduBufferContext->readIndex += 2;
+    return value;
+}
+
 uint32_t readUint32(ByteBufferContext *pduBufferContext) {
     uint8_t *buffer = pduBufferContext->buffer + pduBufferContext->readIndex;
     uint32_t value = (buffer[0] & 255) << 24 | (buffer[1] & 255) << 16 | (buffer[2] & 255) << 8 | (buffer[3] & 255);

@@ -1,1 +1,7 @@
-1. SubmitSm decoding implementation.
+1. SubmitSm decoding implementation - Done
+2. Introducing log4c -
+3. Extending SubmitSm decoding to DeliverSm decoding -
+4. Taking performance details to a graph -
+5. Implementing better tuning methods with Flamingo Auto Tuning -
+
+

@@ -2,7 +2,6 @@
 
 #ifndef SMPP_PDU_STRUCT_CUDA
 #define SMPP_PDU_STRUCT_CUDA
-
 #define MAX_CORRELATION_LENGTH 20
 
 typedef struct cuda_pdu_context_direct_struct {
@@ -41,7 +40,7 @@ typedef struct cuda_submit_sm_req_struct {
     uint8_t smLength;
     uint8_t shortMessage[256];
     uint16_t tlvCount;
-//    Tlv tlvList[10];
+    CudaTlv tlvList[10];
 } CudaSubmitSmReq;
 
 typedef struct cuda_decoded_context_struct {
@@ -50,12 +49,20 @@ typedef struct cuda_decoded_context_struct {
     CudaSubmitSmReq pduStruct;
 } CudaDecodedContext;
 
+typedef struct cuda_dim_struct {
+    uint32_t x;
+    uint32_t y;
+    uint32_t z;
+} CudaDim;
+
 typedef struct cuda_metadata {
     int length;
     uint8_t *pduBuffer;
     CudaPduContext *cudaPduContexts;
     CudaDecodedContext *decodedPduStructList;
     uint64_t pduBufferLength;
+    CudaDim blockDim;
+    CudaDim gridDim;
 } CudaMetadata;
 
 void decodeCuda(CudaMetadata cudaMetadata);

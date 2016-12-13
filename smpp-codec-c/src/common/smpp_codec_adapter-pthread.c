@@ -3,6 +3,8 @@
 #include "smpp_util.h"
 #include "smpp_pdu_struct.h"
 #include "smpp_pdu_struct_cuda.h"
+#include "log4c.h"
+
 
 jobject *createPdu(JNIEnv *env, DecodedContext *decodedContext);
 
@@ -36,8 +38,9 @@ static JfieldCache jfieldCache;
 
 static time_t start_t, end_t;
 static double diff_t;
-static struct timespec tstart={0,0}, tend={0,0};
+static struct timespec tstart = {0, 0}, tend = {0, 0};
 
+log4c_category_t *statLogger;
 
 JNIEXPORT void JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder_initialize
         (JNIEnv *env, jobject thisObj) {
@@ -45,6 +48,8 @@ JNIEXPORT void JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_Default
     cacheJClass(env);
     cacheJMethod(env);
     cacheJField(env);
+    statLogger = log4c_category_get("stat_logger");
+    log4c_init();
 }
 
 JNIEXPORT jobject JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder_decodePDUDirect
@@ -56,7 +61,8 @@ JNIEXPORT jobject JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_Defa
 
 jobject
 decodeWithCuda(JNIEnv *env, jobject pduContainerBuffer, jint size, jint correlationIdLength) {
-    printf("Decoding Cuda\n");
+    log4c_category_log(statLogger, LOG4C_PRIORITY_DEBUG, "Decoding Cuda");
+
     jlong bufferCapacity = (*env)->GetDirectBufferCapacity(env, pduContainerBuffer);
     uint8_t *pduBuffers = (uint8_t *) (*env)->GetDirectBufferAddress(env, pduContainerBuffer);
     ByteBufferContext byteBufferContext = {pduBuffers, 0, (uint64_t) bufferCapacity};
@@ -92,10 +98,9 @@ decodeWithCuda(JNIEnv *env, jobject pduContainerBuffer, jint size, jint correlat
     time(&end_t);
     clock_gettime(CLOCK_MONOTONIC, &tend);
     diff_t = difftime(end_t, start_t);
-//    printf("Cuda Decoding Completed - TimeTaken - %f\n", diff_t);
     printf("Cuda Decoding Completed - TimeTaken %.5f \n",
-           ((double)tend.tv_sec + 1.0e-9*tend.tv_nsec) -
-           ((double)tstart.tv_sec + 1.0e-9*tstart.tv_nsec));
+           ((double) tend.tv_sec + 1.0e-9 * tend.tv_nsec) -
+           ((double) tstart.tv_sec + 1.0e-9 * tstart.tv_nsec));
 
     for (i = 0; i < 1; i++) {
         CudaDecodedContext *decodedContext = &decodedPduStructList[i];
@@ -109,15 +114,20 @@ decodeWithCuda(JNIEnv *env, jobject pduContainerBuffer, jint size, jint correlat
                                                                     decodedPduContextconstructor,
                                                                     (*env)->NewStringUTF(env,
                                                                                          decodedContext->correlationId),
-                                                                    *pdu);
+                                                                    pdu);
                 if ((*env)->ExceptionOccurred(env)) {
                     printf("Exception occurred\n\n");
-                    freeDecodedContext(decodedContext);
+                    return decodedContextContainer;
                 }
                 fflush(stdout);
                 (*env)->CallObjectMethod(env, decodedContextContainer, addDecodedContextMethodId,
                                          decodedPduContextObject);
-//                printf("PDU Success. | Command Id %d \n", decodedContext->commandId);
+                printf("PDU Success. | Command Id %d \n", decodedContext->commandId);
+                if ((*env)->ExceptionOccurred(env)) {
+                    printf("Exception occurred\n\n");
+                    return decodedContextContainer;
+                }
+
             } else {
                 printf("PDU context is null. | Command Id %d \n", decodedContext->commandId);
             }
@@ -189,13 +199,12 @@ decodeWithPthread(JNIEnv *env, jobject pduContainerBuffer, jint size, jint corre
     }
 
     time(&end_t);
-clock_gettime(CLOCK_MONOTONIC, &tend);
+    clock_gettime(CLOCK_MONOTONIC, &tend);
     diff_t = difftime(end_t, start_t);
-//    printf("Cuda Decoding Completed - TimeTaken - %f\n", diff_t);
     printf("Pthread Decoding Completed - TimeTaken %.5f \n",
-           ((double)tend.tv_sec + 1.0e-9*tend.tv_nsec) -
-           ((double)tstart.tv_sec + 1.0e-9*tstart.tv_nsec));
-    for (i = 0; i < 1; i++) {
+           ((double) tend.tv_sec + 1.0e-9 * tend.tv_nsec) -
+           ((double) tstart.tv_sec + 1.0e-9 * tstart.tv_nsec));
+    for (i = 0; i < size; i++) {
         DecodedContext *decodedContext = &decodedPduStructList[i];
         if (decodedContext != 0) {
             jobject *pdu = createPdu(env, decodedContext);
@@ -230,41 +239,43 @@ clock_gettime(CLOCK_MONOTONIC, &tend);
 }
 
 jobject *createPdu(JNIEnv *env, DecodedContext *decodedContext) {
-//    printf("SMPP PDU type %d\n", decodedContext->commandId);
+    printf("SMPP PDU type %d\n", decodedContext->commandId);
     if (decodedContext->commandId == 4) {
         SubmitSmReq submitSmReq = *(SubmitSmReq *) decodedContext->pduStruct;
-//        printf("SubmitSm Request - %d\n", submitSmReq.esmClass);
-//        printf("SubmitSm setCommandLength - %d\n", submitSmReq.header->commandLength);
+        printf("SubmitSm Request - %d\n", submitSmReq.esmClass);
+        printf("SubmitSm setCommandLength - %d\n", submitSmReq.header->commandLength);
         jclass submitSmClass = jClassCache.submitSmClass;
 //        printf("SubmitSm class found - %s\n", submitSmClass);
 
         jmethodID constructor = jmethodCache.constructor;
         jobject submitSmObject = (*env)->NewObject(env, submitSmClass, constructor);
 
-//        printf("SubmitSm setCommandLength - %d\n", submitSmReq.header->commandLength);
+        printf("SubmitSm setCommandLength - %d\n", submitSmReq.header->commandLength);
         jmethodID setCommandLength = jmethodCache.setCommandLength;
         (*env)->CallObjectMethod(env, submitSmObject, setCommandLength, submitSmReq.header->commandLength);
 
-//        printf("SubmitSm setCommandStatus - %d\n", submitSmReq.header->commandStatus);
+        printf("SubmitSm setCommandStatus - %d\n", submitSmReq.header->commandStatus);
         jmethodID setCommandStatus = jmethodCache.setCommandStatus;
         (*env)->CallObjectMethod(env, submitSmObject, setCommandStatus, submitSmReq.header->commandStatus);
 
-//        printf("SubmitSm sequenceNumber - %d\n", submitSmReq.header->sequenceNumber);
+        printf("SubmitSm sequenceNumber - %d\n", submitSmReq.header->sequenceNumber);
         jmethodID setSequenceNumber = jmethodCache.setSequenceNumber;
         (*env)->CallObjectMethod(env, submitSmObject, setSequenceNumber, submitSmReq.header->sequenceNumber);
 
+        printf("SubmitSm service type- %s\n", submitSmReq.serviceType);
         jmethodID setServiceType = jmethodCache.setServiceType;
         (*env)->CallObjectMethod(env, submitSmObject, setServiceType,
                                  (*env)->NewStringUTF(env, submitSmReq.serviceType));
 
+        printf("SubmitSm Source Address - %s\n", submitSmReq.sourceAddress->addressValue);
         jmethodID setSourceAddress = jmethodCache.setSourceAddress;
         jobject *srcAddress = getAddress(env, submitSmReq.sourceAddress);
+        (*env)->CallObjectMethod(env, submitSmObject, setSourceAddress, srcAddress);
 
-        (*env)->CallObjectMethod(env, submitSmObject, setSourceAddress, *srcAddress);
-
-//        printf("SubmitSm Destination Address - %s\n", submitSmReq.destinationAddress->addressValue);
+        printf("SubmitSm Destination ton - %d\n", submitSmReq.destinationAddress->ton);
         jmethodID setDestAddress = jmethodCache.setDestAddress;
-        (*env)->CallObjectMethod(env, submitSmObject, setDestAddress, *getAddress(env, submitSmReq.destinationAddress));
+        (*env)->CallObjectMethod(env, submitSmObject, setDestAddress, getAddress(env, submitSmReq.destinationAddress));
+        printf("SubmitSm Destination Address - %s\n", submitSmReq.destinationAddress->addressValue);
 
         jmethodID setEsmClass = jmethodCache.setEsmClass;
         (*env)->CallObjectMethod(env, submitSmObject, setEsmClass, submitSmReq.esmClass);
@@ -300,8 +311,9 @@ jobject *createPdu(JNIEnv *env, DecodedContext *decodedContext) {
         if (submitSmReq.smLength > 0) {
             jmethodID setShortMessage = jmethodCache.setShortMessage;
             jbyteArray shortMsgArray = (*env)->NewByteArray(env, submitSmReq.smLength);
-            (*env)->SetByteArrayRegion(env, shortMsgArray, 0, submitSmReq.smLength, submitSmReq.shortMessage);
+            (*env)->SetByteArrayRegion(env, shortMsgArray, 0, submitSmReq.smLength, (const jbyte *) submitSmReq.shortMessage);
             (*env)->CallObjectMethod(env, submitSmObject, setShortMessage, shortMsgArray);
+            printf("Short Message- %s\n", submitSmReq.shortMessage);
         }
         return submitSmObject;
     }
@@ -309,26 +321,26 @@ jobject *createPdu(JNIEnv *env, DecodedContext *decodedContext) {
 }
 
 jobject *createPduOnCuda(JNIEnv *env, CudaDecodedContext *decodedContext) {
-//    printf("SMPP PDU type %d\n", decodedContext->commandId);
+    printf("SMPP PDU type %d\n", decodedContext->commandId);
     if (decodedContext->commandId == 4) {
         CudaSubmitSmReq submitSmReq = decodedContext->pduStruct;
-//        printf("SubmitSm Request - %d\n", submitSmReq.esmClass);
-//        printf("SubmitSm setCommandLength - %ld\n", submitSmReq.header.commandLength);
+        printf("SubmitSm Request - %d\n", submitSmReq.esmClass);
+        printf("SubmitSm setCommandLength - %ld\n", submitSmReq.header.commandLength);
         jclass submitSmClass = jClassCache.submitSmClass;
 //        printf("SubmitSm class found - %s\n", submitSmClass);
 
         jmethodID constructor = jmethodCache.constructor;
         jobject submitSmObject = (*env)->NewObject(env, submitSmClass, constructor);
 
-//        printf("SubmitSm setCommandLength - %d\n", submitSmReq.header->commandLength);
+        printf("SubmitSm setCommandLength - %d\n", submitSmReq.header.commandLength);
         jmethodID setCommandLength = jmethodCache.setCommandLength;
         (*env)->CallObjectMethod(env, submitSmObject, setCommandLength, submitSmReq.header.commandLength);
 
-//        printf("SubmitSm setCommandStatus - %d\n", submitSmReq.header->commandStatus);
+        printf("SubmitSm setCommandStatus - %d\n", submitSmReq.header.commandStatus);
         jmethodID setCommandStatus = jmethodCache.setCommandStatus;
         (*env)->CallObjectMethod(env, submitSmObject, setCommandStatus, submitSmReq.header.commandStatus);
 
-//        printf("SubmitSm sequenceNumber - %d\n", submitSmReq.header->sequenceNumber);
+        printf("SubmitSm sequenceNumber - %d\n", submitSmReq.header.sequenceNumber);
         jmethodID setSequenceNumber = jmethodCache.setSequenceNumber;
         (*env)->CallObjectMethod(env, submitSmObject, setSequenceNumber, submitSmReq.header.sequenceNumber);
 
@@ -339,14 +351,16 @@ jobject *createPduOnCuda(JNIEnv *env, CudaDecodedContext *decodedContext) {
         jmethodID setSourceAddress = jmethodCache.setSourceAddress;
         jobject *srcAddress = getCudaAddress(env, &submitSmReq.sourceAddress);
 
-        (*env)->CallObjectMethod(env, submitSmObject, setSourceAddress, *srcAddress);
+        (*env)->CallObjectMethod(env, submitSmObject, setSourceAddress, srcAddress);
 
-//        printf("SubmitSm Destination Address - %s\n", submitSmReq.destinationAddress->addressValue);
+//        printf("SubmitSm Destination Address - %s\n", submitSmReq.destinationAddress.addressValue);
         jmethodID setDestAddress = jmethodCache.setDestAddress;
-        (*env)->CallObjectMethod(env, submitSmObject, setDestAddress, *getCudaAddress(env, &submitSmReq.destinationAddress));
+        (*env)->CallObjectMethod(env, submitSmObject, setDestAddress, getCudaAddress(env, &submitSmReq.destinationAddress));
+        printf("SubmitSm Destination Address - %s\n", submitSmReq.destinationAddress.addressValue);
 
         jmethodID setEsmClass = jmethodCache.setEsmClass;
         (*env)->CallObjectMethod(env, submitSmObject, setEsmClass, submitSmReq.esmClass);
+        printf("Esm Class - %d\n", submitSmReq.esmClass);
 
         jmethodID setProtocolId = jmethodCache.setProtocolId;
         (*env)->CallObjectMethod(env, submitSmObject, setProtocolId, submitSmReq.protocolId);
@@ -375,14 +389,16 @@ jobject *createPduOnCuda(JNIEnv *env, CudaDecodedContext *decodedContext) {
 
         jmethodID setDefaultMsgId = jmethodCache.setDefaultMsgId;
         (*env)->CallObjectMethod(env, submitSmObject, setDefaultMsgId, submitSmReq.defaultMsgId);
-
+        printf("Msg Id - %d\n", submitSmReq.defaultMsgId);
         if (submitSmReq.smLength > 0) {
+            printf("Message Exists- %d\n", submitSmReq.smLength);
             jmethodID setShortMessage = jmethodCache.setShortMessage;
             jbyteArray shortMsgArray = (*env)->NewByteArray(env, submitSmReq.smLength);
-            (*env)->SetByteArrayRegion(env, shortMsgArray, 0, submitSmReq.smLength, submitSmReq.shortMessage);
+            (*env)->SetByteArrayRegion(env, shortMsgArray, 0, submitSmReq.smLength, (const jbyte *) submitSmReq.shortMessage);
             (*env)->CallObjectMethod(env, submitSmObject, setShortMessage, shortMsgArray);
+            printf("Short Message- %s\n", submitSmReq.shortMessage);
         }
-        return &submitSmObject;
+        return submitSmObject;
     }
     return 0;
 }

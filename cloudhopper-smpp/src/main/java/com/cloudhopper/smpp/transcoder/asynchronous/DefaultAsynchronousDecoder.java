@@ -2,6 +2,7 @@ package com.cloudhopper.smpp.transcoder.asynchronous;
 
 import com.cloudhopper.smpp.impl.SmppSessionChannelListener;
 import com.cloudhopper.smpp.pdu.Pdu;
+import com.cloudhopper.smpp.pdu.SubmitSm;
 import com.cloudhopper.smpp.transcoder.PduTranscoder;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.slf4j.Logger;
@@ -29,7 +30,7 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
 
     private static final Logger logger = LoggerFactory.getLogger(DefaultAsynchronousDecoder.class);
 
-    public static int MAX_PDU_LENGTH = 100;
+    public static int MAX_PDU_LENGTH = 200;
 
     private Map<String, SmppSessionChannelListener> sessionChannelListeners;
 
@@ -131,6 +132,7 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
             SmppSessionChannelListener listener =
                     sessionChannelListeners.get(decodedPduContext.getCorrelationId());
             if (listener != null && decodedPduContext.getPdu() != null) {
+                System.out.println("MESSAGE - " + new String(((SubmitSm) decodedPduContext.getPdu()).getShortMessage()));
                 listener.firePduReceived(decodedPduContext.getPdu());
             }
         }

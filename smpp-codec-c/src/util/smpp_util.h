@@ -10,6 +10,8 @@ Created by prabath on 6/26/16.
 
 uint8_t readUint8(ByteBufferContext *pduBufferContext);
 
+uint16_t readUint16(ByteBufferContext *pduBufferContext);
+
 uint32_t readUint32(ByteBufferContext *pduBufferContext);
 
 char *readString(ByteBufferContext *pduBufferContext, int startIndex, int endIndex);

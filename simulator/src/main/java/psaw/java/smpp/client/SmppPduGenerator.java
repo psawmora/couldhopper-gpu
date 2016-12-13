@@ -128,6 +128,7 @@ public class SmppPduGenerator {
     public void sendSubmitSm(SubmitSm submitSm, long timeout) {
         try {
             submitSm.setSourceAddress(new Address((byte) 1, (byte) 2, smppClientConfiguration.getClientAddress()));
+            submitSm.setDestAddress(new Address((byte) 3, (byte) 4, smppClientConfiguration.getClientAddress()));
             session.sendRequestPdu(submitSm, timeout, false);
             session.getSendWindow().complete(submitSm.getSequenceNumber(), submitSm.createResponse());
             TpsLogger.getInstance().logRequestSent(submitSm);

@@ -5,6 +5,7 @@ Created by prabath on 6/26/16.
 
 #include <sys/types.h>
 #include <sys/syscall.h>
+#include <sys/queue.h>
 #include <unistd.h>
 
 #include "smpp_pdu_struct.h"
@@ -13,6 +14,13 @@ Created by prabath on 6/26/16.
 void printAddress(Address *address);
 
 SubmitSmReq *decodeSubmitSm(PduContext *pduContext, ByteBufferContext *context);
+
+typedef struct DecodedTlvContextStruct {
+    Tlv *tlvList;
+    uint16_t nTlv;
+} DecodedTlvContext;
+
+DecodedTlvContext decodeTlv(ByteBufferContext *context);
 
 void *decode(void *threadParam) {
     ThreadParam *context = (ThreadParam *) threadParam;
@@ -49,6 +57,7 @@ void *decodeSingle(DirectPduContext *pduContext) {
     bufferContext->buffer = pduBuffer;
     bufferContext->readIndex = startIndex;
     bufferContext->limit = length;
+    bufferContext->initialReadIndex = startIndex;
 
     SmppHeader *smppHeader = malloc(sizeof(SmppHeader));
 
@@ -57,11 +66,11 @@ void *decodeSingle(DirectPduContext *pduContext) {
     smppHeader->commandStatus = readUint32(bufferContext);
     smppHeader->sequenceNumber = readUint32(bufferContext);
 
-   /* printf("Limit - %ld\n", bufferContext->limit);
+    printf("Limit - %ld\n", bufferContext->limit);
     printf("CommandLength - %d\n", smppHeader->commandLength);
     printf("CommandId - %d\n", smppHeader->commandId);
     printf("CommandStatus - %d\n", smppHeader->commandStatus);
-    printf("SequenceNumber - %d\n", smppHeader->sequenceNumber);*/
+    printf("SequenceNumber - %d\n", smppHeader->sequenceNumber);
     if (smppHeader->commandId == 4) {
         SubmitSmReq *submitSmReq = decodeSubmitSm(pduContext, bufferContext);
         submitSmReq->header = smppHeader;
@@ -111,13 +120,41 @@ SubmitSmReq *decodeSubmitSm(PduContext *pduContext, ByteBufferContext *context) 
     if (submitSm->smLength > 0) {
         submitSm->shortMessage = readNBytes(&bufferContext, submitSm->smLength);
     }
+    DecodedTlvContext tlvContext = decodeTlv(&bufferContext);
+    submitSm->tlvList = tlvContext.tlvList;
+    submitSm->tlvCount = tlvContext.nTlv;
     return submitSm;
 }
 
+DecodedTlvContext decodeTlv(ByteBufferContext *context) {
+    DecodedTlvContext decodedTlvContext;
+    uint16_t tlvCount = 0;
+    Tlv *tlvList = malloc(sizeof(Tlv) * 10); // This need to be a dynamic list.
+    printf("Tlv read-index - %d | limit - %d\n", context->readIndex, context->limit);
+    while ((context->readIndex - context->initialReadIndex) < context->limit - 4 && tlvCount < 10) {
+        uint16_t tag = readUint16(context);
+        printf("tlv count  - %d\n", tlvCount);
+        printf("tag - %d\n", tag);
+        uint32_t length = readUint16(context);
+        printf("length - %d\n", length);
+        if ((context->readIndex - context->initialReadIndex) <= context->limit - length) {
+            uint8_t *value = readNBytes(context, length);
+            printf("VALUEEEEEEEEEEEEEEEEEEEEEEEEEE - %s\n", value);
+            Tlv tlv = {tag, length, value};
+            tlvList[tlvCount] = tlv;
+            tlvCount++;
+        } else {
+            printf("Tlv remaining - %d - %d\n", (context->readIndex - context->initialReadIndex), context->limit - length);
+            break;
+        }
+    }
+    decodedTlvContext.nTlv = tlvCount;
+    decodedTlvContext.tlvList = tlvList;
+    return decodedTlvContext;
+}
+
 void printAddress(Address *address) {
-/*
     printf("ton - %d\n", address->ton);
     printf("npi - %d\n", address->npi);
-    printf("address - %s\n", (char *) address->addressValue);
-*/
+    printf("address - %s\n\n\n", (char *) address->addressValue);
 }

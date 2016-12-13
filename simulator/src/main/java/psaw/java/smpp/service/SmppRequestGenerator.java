@@ -117,7 +117,8 @@ public class SmppRequestGenerator {
                 submitSm.setEsmClass(SmppConstants.ESM_CLASS_MT_SMSC_DELIVERY_RECEIPT);
                 submitSm.setServiceType("t1");
                 submitSm.setShortMessage(message.getBytes());
-                submitSm.setShortMessage(message.getBytes());
+//                submitSm.addOptionalParameter(new Tlv(SmppConstants.TAG_USER_MESSAGE_REFERENCE, "test-tlv".getBytes()));
+//                submitSm.addOptionalParameter(new Tlv(SmppConstants.TAG_SOURCE_PORT, "1122".getBytes()));
                 //                if(count.incrementAndGet() <= 100000){
                 pduGenerator.sendSubmitSm(submitSm, 2000);
                 //                }

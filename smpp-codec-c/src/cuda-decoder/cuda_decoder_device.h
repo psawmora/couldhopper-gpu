@@ -4,5 +4,4 @@
 
 #include "cuda_smpp_util.h"
 
-//__device__ void testPrint();
 __device__ void decodeSinglePdu(CudaPduContext *pduContext, CudaDecodedContext *decodedPduStruct, uint8_t *pduBuffer);

@@ -18,7 +18,7 @@
 #elif CUDA_DECODER
 #define decodePduDirect(env, pduContainerBuffer, size, correlationIdLength) decodeWithCuda(env, pduContainerBuffer, size, correlationIdLength)
 #else
-#define decodePduDirect(env, pduContainerBuffer, size, correlationIdLength) decodeWithPthread(env, pduContainerBuffer, size, correlationIdLength)
+#define decodePduDirect(env, pduContainerBuffer, size, correlationIdLength) decodeWithCuda(env, pduContainerBuffer, size, correlationIdLength)
 #endif
 
 typedef struct jmethod_cache {
@@ -103,7 +103,7 @@ typedef struct address_struct {
     char *addressValue;
 } Address;
 
-typedef struct submit_sm_req_struct {
+typedef struct base_sm_req_struct {
     SmppHeader *header;
     char *serviceType;
     Address *sourceAddress;

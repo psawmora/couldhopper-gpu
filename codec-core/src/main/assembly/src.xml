@@ -28,5 +28,11 @@
                 <exclude>wrapper.jar</exclude>
             </excludes>
         </fileSet>
+        <fileSet>
+            <directory>../smpp-codec-c/lib</directory>
+            <outputDirectory>lib</outputDirectory>
+            <fileMode>0755</fileMode>
+            <directoryMode>755</directoryMode>
+        </fileSet>
     </fileSets>
 </assembly>
