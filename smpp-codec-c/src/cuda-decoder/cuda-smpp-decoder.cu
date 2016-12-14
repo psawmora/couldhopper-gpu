@@ -113,33 +113,11 @@ void decodeCuda(CudaMetadata cudaMetadata) {
     CudaDecodedContext *decodedPduStructList = cudaMetadata.decodedPduStructList;
     uint8_t *pduBuffer = cudaMetadata.pduBuffer;
     int nPduContext = cudaMetadata.length;
-
-//    uint8_t *pduBuffer_d;
-//    CudaPduContext *pduContexts_d;
-//    CudaDecodedContext *decodedPduStructList_d;
-
     int pduContextSize = nPduContext * sizeof(CudaPduContext);
     int decodedContextSize = nPduContext * sizeof(CudaDecodedContext);
 
-/*    cudaMalloc((void **) &pduBuffer_d,
-               sizeof(uint8_t) * cudaMetadata.pduBufferLength)*/;
     cudaMemcpy(pduBuffer_d, pduBuffer, sizeof(uint8_t) * cudaMetadata.pduBufferLength, cudaMemcpyHostToDevice);
-
-    /*cudaMalloc((void **) &pduContexts_d, sizeof(CudaPduContext) * nPduContext);*/
     cudaMemcpy(pduContexts_d, pduContexts, sizeof(CudaPduContext) * nPduContext, cudaMemcpyHostToDevice);
-
-/*    gpuErrchk(
-            cudaMalloc((void **) &decodedPduStructList_d,
-                       sizeof(CudaDecodedContext) * nPduContext))*/;
-    /*gpuErrchk(
-            cudaMemcpy(decodedPduStructList_d, decodedPduStructList,
-                    sizeof(CudaDecodedContext) * nPduContext,
-                    cudaMemcpyHostToDevice));*/
-
-    /*printf(
-     "Before launch Correlation Id %s | pdu count %d | buffer length %d\n",
-     testContext->correlationId, nPduContext,
-     cudaMetadata.pduBufferLength);*/
 
     CudaDim block = cudaMetadata.blockDim;
     dim3 blockDim(block.x, block.y, block.z);

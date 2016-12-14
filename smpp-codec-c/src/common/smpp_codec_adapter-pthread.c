@@ -1,5 +1,4 @@
 #include <time.h>
-
 #include "smpp_codec.h"
 
 jobject *createPdu(JNIEnv *env, DecodedContext *decodedContext);
