@@ -1,10 +1,6 @@
 #include <time.h>
 
-#include "smpp_util.h"
-#include "smpp_pdu_struct.h"
-#include "smpp_pdu_struct_cuda.h"
-#include "log4c.h"
-
+#include "smpp_codec.h"
 
 jobject *createPdu(JNIEnv *env, DecodedContext *decodedContext);
 
@@ -50,6 +46,8 @@ JNIEXPORT void JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_Default
     cacheJField(env);
     statLogger = log4c_category_get("stat_logger");
     log4c_init();
+    CodecConfiguration configuration = {4000, 200 * 4000};
+    init(&configuration);
 }
 
 JNIEXPORT jobject JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder_decodePDUDirect
@@ -65,43 +63,23 @@ decodeWithCuda(JNIEnv *env, jobject pduContainerBuffer, jint size, jint correlat
 
     jlong bufferCapacity = (*env)->GetDirectBufferCapacity(env, pduContainerBuffer);
     uint8_t *pduBuffers = (uint8_t *) (*env)->GetDirectBufferAddress(env, pduContainerBuffer);
-    ByteBufferContext byteBufferContext = {pduBuffers, 0, (uint64_t) bufferCapacity};
-//    CudaPduContext *pduContexts = malloc(sizeof(CudaPduContext) * size);
-    CudaPduContext *pduContexts = allocatePinnedPduContext(size);
-    int i;
-    int startPosition = 0;
-    for (i = 0; i < size; i++) {
-        char *correlationId = readStringByLength(&byteBufferContext, correlationIdLength);
-        uint32_t pduLength = readUint32(&byteBufferContext);
-        int startIndex = startPosition + correlationIdLength;
-        strncpy(pduContexts[i].correlationId, correlationId, sizeof(char) * (correlationIdLength + 1));
-        pduContexts[i].start = (uint32_t) startIndex;
-        pduContexts[i].length = pduLength;
-/*
-        printf("CorrelationId 1 - %s | CorrelationId 2 - %s | start-position - %d| pdu length -  %d | Read Index - %ld \n",
-               correlationId, pduContexts[i].correlationId, startPosition, pduLength, byteBufferContext.readIndex);
-*/
-        startPosition += (correlationIdLength + pduLength);
-        byteBufferContext.readIndex = (uint64_t) startPosition;
-    }
+    DecoderMetadata decoderMetadata = {pduBuffers, (uint32_t) size, (uint64_t) bufferCapacity, (uint32_t) correlationIdLength};
+    CudaDecodedContext *decodedPduStructList = decodeGpu(decoderMetadata);
 
-    jclass decodedContextContainerClass = jClassCache.arrayListClass;
-    jmethodID decodedContextContainerMethod = jmethodCache.decodedContextContainerMethod;
-    jobject decodedContextContainer = (*env)->NewObject(env, decodedContextContainerClass,
-                                                        decodedContextContainerMethod);
-    jmethodID addDecodedContextMethodId = jmethodCache.addDecodedContextMethodId;
-
-    CudaDecodedContext *decodedPduStructList = malloc(sizeof(CudaDecodedContext) * size);
-    CudaMetadata metadata = {size, pduBuffers, pduContexts, decodedPduStructList, (uint64_t) bufferCapacity};
-//    fflush(stdout);
-    decodeCuda(metadata);
     time(&end_t);
     clock_gettime(CLOCK_MONOTONIC, &tend);
     diff_t = difftime(end_t, start_t);
+
     printf("Cuda Decoding Completed - TimeTaken %.5f \n",
            ((double) tend.tv_sec + 1.0e-9 * tend.tv_nsec) -
            ((double) tstart.tv_sec + 1.0e-9 * tstart.tv_nsec));
 
+    jclass decodedContextContainerClass = jClassCache.arrayListClass;
+    jmethodID decodedContextContainerMethod = jmethodCache.decodedContextContainerMethod;
+    jobject decodedContextContainer = (*env)->NewObject(env, decodedContextContainerClass, decodedContextContainerMethod);
+    jmethodID addDecodedContextMethodId = jmethodCache.addDecodedContextMethodId;
+
+    int i;
     for (i = 0; i < 1; i++) {
         CudaDecodedContext *decodedContext = &decodedPduStructList[i];
         if (decodedContext != 0) {
@@ -136,7 +114,6 @@ decodeWithCuda(JNIEnv *env, jobject pduContainerBuffer, jint size, jint correlat
         }
     }
     free(decodedPduStructList);
-    freePinndedPduContext(size, pduContexts);
     printf("Returning\n");
     fflush(stdout);
     return decodedContextContainer;
@@ -147,56 +124,9 @@ decodeWithPthread(JNIEnv *env, jobject pduContainerBuffer, jint size, jint corre
     printf("Decoding Pthread\n");
     jlong bufferCapacity = (*env)->GetDirectBufferCapacity(env, pduContainerBuffer);
     uint8_t *pduBuffers = (uint8_t *) (*env)->GetDirectBufferAddress(env, pduContainerBuffer);
-    ByteBufferContext byteBufferContext = {pduBuffers, 0, bufferCapacity};
-    DirectPduContext *pduContexts = malloc(sizeof(DirectPduContext) * size);
-    int i;
-    int startPosition = 0;
-    for (i = 0; i < size; i++) {
-        char *correlationId = readStringByLength(&byteBufferContext, correlationIdLength);
-        uint32_t pduLength = readUint32(&byteBufferContext);
-        int startIndex = startPosition + correlationIdLength;
-        pduContexts[i].correlationId = correlationId;
-        pduContexts[i].pduBuffer = pduBuffers;
-        pduContexts[i].start = startIndex;
-        pduContexts[i].length = pduLength;
-        startPosition += (correlationIdLength + pduLength);
-/*
-        printf("CorrelationId - %s | Read Index - %d |  pdu length -  %d | start-position - %d\n",
-               correlationId, byteBufferContext.readIndex, pduLength, startPosition);
-*/
-        byteBufferContext.readIndex = startPosition;
-    }
-    jclass decodedContextContainerClass = jClassCache.arrayListClass;
-    jmethodID decodedContextContainerMethod = jmethodCache.decodedContextContainerMethod;
-    jobject decodedContextContainer = (*env)->NewObject(env, decodedContextContainerClass,
-                                                        decodedContextContainerMethod);
-    jmethodID addDecodedContextMethodId = jmethodCache.addDecodedContextMethodId;
 
-    int nThread = N_THREAD;
-    int index = 0;
-    int batchSize = size > nThread ? size / nThread : size;
-    DecodedContext *decodedPduStructList = malloc(sizeof(DecodedContext) * size);
-    ThreadParam *threadParams[nThread];
-
-    pthread_t threads[nThread];
-    int threadIndex = 0;
-    while (index < size) {
-        int startIndex = index;
-        int length = (size - index) <= batchSize ? (size - index) : batchSize;
-        index += length;
-        ThreadParam *threadParam = malloc(sizeof(ThreadParam));
-        threadParam->startIndex = startIndex;
-        threadParam->length = length;
-        threadParam->pduContexts = pduContexts;
-        threadParam->decodedPduStructList = decodedPduStructList;
-        threadParams[threadIndex] = threadParam;
-        int state = pthread_create(&threads[threadIndex], NULL, decode, (void *) threadParam);
-        threadIndex++;
-    }
-
-    for (i = 0; i < threadIndex; i++) {
-        pthread_join(threads[i], NULL);
-    }
+    DecoderMetadata decoderMetadata = {pduBuffers, (uint32_t) size, (uint64_t) bufferCapacity, (uint32_t) correlationIdLength};
+    DecodedContext *decodedPduStructList = decodePthread(decoderMetadata);
 
     time(&end_t);
     clock_gettime(CLOCK_MONOTONIC, &tend);
@@ -204,6 +134,13 @@ decodeWithPthread(JNIEnv *env, jobject pduContainerBuffer, jint size, jint corre
     printf("Pthread Decoding Completed - TimeTaken %.5f \n",
            ((double) tend.tv_sec + 1.0e-9 * tend.tv_nsec) -
            ((double) tstart.tv_sec + 1.0e-9 * tstart.tv_nsec));
+
+    jclass decodedContextContainerClass = jClassCache.arrayListClass;
+    jmethodID decodedContextContainerMethod = jmethodCache.decodedContextContainerMethod;
+    jobject decodedContextContainer = (*env)->NewObject(env, decodedContextContainerClass,
+                                                        decodedContextContainerMethod);
+    jmethodID addDecodedContextMethodId = jmethodCache.addDecodedContextMethodId;
+    int i;
     for (i = 0; i < size; i++) {
         DecodedContext *decodedContext = &decodedPduStructList[i];
         if (decodedContext != 0) {
@@ -232,7 +169,6 @@ decodeWithPthread(JNIEnv *env, jobject pduContainerBuffer, jint size, jint corre
         }
     }
     free(decodedPduStructList);
-    free(pduContexts);
     printf("Returning\n");
     fflush(stdout);
     return decodedContextContainer;

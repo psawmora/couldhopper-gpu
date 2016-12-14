@@ -1,1 +1,1 @@
-set(SOURCE_FILES ${SOURCE_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/smpp_codec_adapter-pthread.c PARENT_SCOPE)
+set(SOURCE_FILES ${SOURCE_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/smpp_codec_adapter-pthread.c ${CMAKE_CURRENT_SOURCE_DIR}/smpp_codec.c PARENT_SCOPE)

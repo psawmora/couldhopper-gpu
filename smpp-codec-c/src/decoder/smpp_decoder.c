@@ -24,9 +24,7 @@ DecodedTlvContext decodeTlv(ByteBufferContext *context);
 
 void *decode(void *threadParam) {
     ThreadParam *context = (ThreadParam *) threadParam;
-
     pid_t x = syscall(__NR_gettid);
-
     DirectPduContext *pduContexts = context->pduContexts;
     DecodedContext *decodedPduStructList = context->decodedPduStructList;
     int length = context->length;

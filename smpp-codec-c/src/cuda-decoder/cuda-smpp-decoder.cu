@@ -8,6 +8,10 @@ extern "C" {
 #include "smpp_pdu_struct_cuda.h"
 }
 
+static uint8_t *pduBuffer_d;
+static CudaPduContext *pduContexts_d;
+static CudaDecodedContext *decodedPduStructList_d;
+
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort =
@@ -89,6 +93,12 @@ CudaPduContext *allocatePinnedPduContext(int length) {
     return pduContexts;
 }
 
+void initCudaParameters(uint32_t pduContextSize, uint64_t pduBufferLength) {
+    gpuErrchk(cudaMalloc((void **) &pduBuffer_d, sizeof(uint8_t) * pduBufferLength));
+    gpuErrchk(cudaMalloc((void **) &pduContexts_d, sizeof(CudaPduContext) * pduContextSize));
+    gpuErrchk(cudaMalloc((void **) &decodedPduStructList_d, sizeof(CudaDecodedContext) * pduContextSize));
+}
+
 void freePinndedPduContext(int length, CudaPduContext *pduContexts) {
     cudaFreeHost(pduContexts);
 }
@@ -104,34 +114,28 @@ void decodeCuda(CudaMetadata cudaMetadata) {
     uint8_t *pduBuffer = cudaMetadata.pduBuffer;
     int nPduContext = cudaMetadata.length;
 
-    CudaPduContext *pduContexts_d;
-    CudaDecodedContext *decodedPduStructList_d;
-    uint8_t *pduBuffer_d;
+//    uint8_t *pduBuffer_d;
+//    CudaPduContext *pduContexts_d;
+//    CudaDecodedContext *decodedPduStructList_d;
 
     int pduContextSize = nPduContext * sizeof(CudaPduContext);
     int decodedContextSize = nPduContext * sizeof(CudaDecodedContext);
 
-    cudaMalloc((void **) &pduBuffer_d,
-               sizeof(uint8_t) * cudaMetadata.pduBufferLength);
-    cudaMemcpy(pduBuffer_d, pduBuffer,
-               sizeof(uint8_t) * cudaMetadata.pduBufferLength,
-               cudaMemcpyHostToDevice);
+/*    cudaMalloc((void **) &pduBuffer_d,
+               sizeof(uint8_t) * cudaMetadata.pduBufferLength)*/;
+    cudaMemcpy(pduBuffer_d, pduBuffer, sizeof(uint8_t) * cudaMetadata.pduBufferLength, cudaMemcpyHostToDevice);
 
-    cudaMalloc((void **) &pduContexts_d, sizeof(CudaPduContext) * nPduContext);
-    cudaMemcpy(pduContexts_d, pduContexts, sizeof(CudaPduContext) * nPduContext,
-               cudaMemcpyHostToDevice);
+    /*cudaMalloc((void **) &pduContexts_d, sizeof(CudaPduContext) * nPduContext);*/
+    cudaMemcpy(pduContexts_d, pduContexts, sizeof(CudaPduContext) * nPduContext, cudaMemcpyHostToDevice);
 
-    gpuErrchk(
+/*    gpuErrchk(
             cudaMalloc((void **) &decodedPduStructList_d,
-                       sizeof(CudaDecodedContext) * nPduContext));
+                       sizeof(CudaDecodedContext) * nPduContext))*/;
     /*gpuErrchk(
             cudaMemcpy(decodedPduStructList_d, decodedPduStructList,
                     sizeof(CudaDecodedContext) * nPduContext,
                     cudaMemcpyHostToDevice));*/
 
-    CudaPduContext *testContext = (CudaPduContext *) malloc(
-            sizeof(CudaPduContext));
-    memcpy(testContext, &pduContexts[0], sizeof(CudaPduContext));
     /*printf(
      "Before launch Correlation Id %s | pdu count %d | buffer length %d\n",
      testContext->correlationId, nPduContext,
@@ -146,11 +150,9 @@ void decodeCuda(CudaMetadata cudaMetadata) {
     gpuErrchk(cudaPeekAtLastError());
     cudaDeviceSynchronize();
     gpuErrchk(
-            cudaMemcpy(decodedPduStructList, decodedPduStructList_d,
-                       sizeof(CudaDecodedContext) * nPduContext,
+            cudaMemcpy(decodedPduStructList, decodedPduStructList_d, sizeof(CudaDecodedContext) * nPduContext,
                        cudaMemcpyDeviceToHost));
     gpuErrchk(cudaGetLastError());
-    free(testContext);
     cudaDeviceSynchronize();
     cudaFree(decodedPduStructList_d);
     cudaFree(pduContexts_d);
