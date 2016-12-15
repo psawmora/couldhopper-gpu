@@ -8,10 +8,12 @@ import org.jboss.netty.buffer.ChannelBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -52,11 +54,19 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
 
     private ChannelBuffer pdu;
 
+    private volatile boolean isTuningMode = false;
+
+    private volatile boolean isAccept = true;
+
+    private String configurationFilePath;
+
     private native List<DecodedPduContext> decodePDU(List<AsynchronousContext> bufferContexts);
 
     private native List<DecodedPduContext> decodePDUDirect(ByteBuffer containerBuffer, int batchSize, int correlationIdLength);
 
-    private native void initialize();
+    private native void startTuner(ByteBuffer containerBuffer, int batchSize, int correlationIdLength);
+
+    private native void initialize(String configurationFilePath);
 
     static {
         System.loadLibrary("SMPPDecoder");
@@ -73,7 +83,17 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
         this.currentBatchSize = new AtomicInteger(0);
         this.batchSize = batchSize;
         this.pduContainerBufferActive = ByteBuffer.allocateDirect(MAX_PDU_LENGTH * batchSize);
-        initialize();
+        try {
+            Properties properties = new Properties();
+            properties.load(this.getClass().getResourceAsStream("/system.properties"));
+            configurationFilePath = properties.getProperty("codec.configuration.file.path",
+                    "/home/prabath/Projects/Msc/couldhopper-gpu/codec-core/src/main/resources/codec-mode.cfg");
+            isTuningMode = Boolean.parseBoolean(properties.getProperty("tuning.mode.on", "false"));
+        } catch (IOException e) {
+            logger.error("Error occurred while loading properties", e);
+            System.exit(-1);
+        }
+        initialize(configurationFilePath);
     }
 
     @Override
@@ -89,6 +109,10 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
     }
 
     private Future<?> sendAsynch(final AsynchronousContext asynchronousContext, final SmppSessionChannelListener listener) {
+        if (!isAccept) {
+            logger.debug("Not accepting requests as the performance tuning is on the way");
+            return null;
+        }
         return executorService.submit(() -> {
             try {
                 ChannelBuffer buffer = asynchronousContext.getChannelBuffer();
@@ -107,12 +131,21 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
                     return;
                 }
                 if (currentBatchSize.compareAndSet(batchSize, 0)) {
-                    logger.debug("Sending the batch to the decoder");
-                    System.out.println("Sending the batch to the decoder");
-                    List<DecodedPduContext> decodedPduContexts = decodePDUDirect(pduContainerBufferActive, batchSize, 15);
-                    System.out.println("Got Response " + decodedPduContexts.size());
-                    pduContainerBufferActive.position(0);
-                    notifyListeners(decodedPduContexts);
+                    if (isTuningMode) {
+                        isAccept = false;
+                        logger.debug("Starting performance tuning and sending batch");
+                        System.out.println("Starting performance tuning and sending batch");
+                        startTuner(pduContainerBufferActive, batchSize, 15);
+                        pduContainerBufferActive.position(0);
+                        logger.debug("Performance tuning ended.");
+                    } else {
+                        logger.debug("Sending the batch to the decoder");
+                        System.out.println("Sending the batch to the decoder");
+                        List<DecodedPduContext> decodedPduContexts = decodePDUDirect(pduContainerBufferActive, batchSize, 15);
+                        System.out.println("Got Response " + decodedPduContexts.size());
+                        pduContainerBufferActive.position(0);
+                        notifyListeners(decodedPduContexts);
+                    }
                 } else {
                     pdu = asynchronousContext.getChannelBuffer().copy();
                     String channelId = asynchronousContext.getChannelId();

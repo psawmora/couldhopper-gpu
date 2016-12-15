@@ -1,15 +1,155 @@
+#include "libconfig.h"
 #include "smpp_codec.h"
+
+int useGpu = 0;
+CudaDim blockDimProdction;
+CudaDim gridDimProduction;
 
 static CudaPduContext *cudaPduContext; // Pre-allocate Cuda-Context for decoding;
 
 static uint32_t currentCudaContextSize;
 
+static CodecMode currentMode;
+
+static int maxPacketSize = 100;
+static int maxBatchSize = 10000;
+typedef struct cuda_performance_metric_struct {
+    CudaDim *blockDimList;
+    CudaDim *gridDimList;
+    uint32_t length;
+
+} CudaPerformanceMetric;
+
+static CudaPerformanceMetric performanceMetric;
+
+static int tunerLoopCount = 1;
+static int performanceMetricCount = 0;
+
+void configureTuner(config_t *propConfig);
+
 void init(CodecConfiguration *configuration) {
     // Need to initialize loggers.
     // Then need to pre-allocate pinned memory and Cuda Global Memory.
-    currentCudaContextSize = configuration->pduContextInitSize;
-    cudaPduContext = allocatePinnedPduContext(currentCudaContextSize);
-    initCudaParameters(configuration->pduContextInitSize, configuration->pduBufferInitSize);
+    currentMode = PRODUCTION;
+
+    config_t propConfig;
+    config_init(&propConfig);
+    if (!config_read_file(&propConfig, configuration->propertyFilePath)) {
+        fprintf(stderr, "%s:%d - %s\n",
+                config_error_file(&propConfig), config_error_line(&propConfig), config_error_text(&propConfig));
+        config_destroy(&propConfig);
+        return;
+    }
+
+    config_lookup_bool(&propConfig, "isUseGpu", &useGpu);
+    config_lookup_int(&propConfig, "max_packet_size", &maxPacketSize);
+    config_lookup_int(&propConfig, "max_batch_size", &maxBatchSize);
+    config_lookup_int(&propConfig, "tuner_loop_count", &tunerLoopCount);
+    currentCudaContextSize = (uint32_t) maxBatchSize;
+    cudaPduContext = allocatePinnedPduContext(maxBatchSize);
+    initCudaParameters((uint32_t) maxBatchSize, ((uint64_t) maxPacketSize * (uint64_t) maxBatchSize));
+
+    int isTunerMode = 0;
+    config_lookup_bool(&propConfig, "isTunerMode", &isTunerMode);
+    currentMode = isTunerMode ? TUNER : PRODUCTION;
+    printf("Is Use GPU %d | Max Packet Size %d | Max Batch Size %d | Tuner Mode %d\n",
+           useGpu, maxPacketSize, maxBatchSize, currentMode);
+    fflush(stdout);
+    switch (currentMode) {
+        case TUNER: {
+            configureTuner(&propConfig);
+            break;
+        }
+        default: {
+            int x, y, z;
+            config_setting_t *block = config_lookup(&propConfig, "production.block");
+            config_setting_t *grid = config_lookup(&propConfig, "production.grid");
+
+            config_setting_lookup_int(block, "x", &x);
+            config_setting_lookup_int(block, "y", &y);
+            config_setting_lookup_int(block, "z", &z);
+
+            blockDimProdction.x = (uint32_t) x;
+            blockDimProdction.y = (uint32_t) y;
+            blockDimProdction.z = (uint32_t) z;
+
+            config_setting_lookup_int(grid, "x", &x);
+            config_setting_lookup_int(grid, "y", &y);
+            config_setting_lookup_int(grid, "z", &z);
+
+            gridDimProduction.x = (uint32_t) x;
+            gridDimProduction.y = (uint32_t) y;
+            gridDimProduction.z = (uint32_t) z;
+        }
+    }
+}
+
+void configureTuner(config_t *propConfig) {
+    config_setting_t *blockSetting = config_lookup(propConfig, "tuner.block");
+    config_setting_t *gridSetting = config_lookup(propConfig, "tuner.grid");
+
+    if (blockSetting != NULL && gridSetting != NULL) {
+        int length = config_setting_length(blockSetting); // Only need the length of one metric
+        performanceMetricCount = length;
+        performanceMetric.blockDimList = malloc(sizeof(CudaDim) * length);
+        performanceMetric.gridDimList = malloc(sizeof(CudaDim) * length);
+        int i;
+        for (i = 0; i < length; ++i) {
+            int x, y, z;
+            config_setting_t *block = config_setting_get_elem(blockSetting, i);
+            config_setting_t *grid = config_setting_get_elem(gridSetting, i);
+
+            config_setting_lookup_int(block, "x", &x);
+            config_setting_lookup_int(block, "y", &y);
+            config_setting_lookup_int(block, "z", &z);
+            performanceMetric.blockDimList[i].x = (uint32_t) x;
+            performanceMetric.blockDimList[i].y = (uint32_t) y;
+            performanceMetric.blockDimList[i].z = (uint32_t) z;
+
+            config_setting_lookup_int(grid, "x", &x);
+            config_setting_lookup_int(grid, "y", &y);
+            config_setting_lookup_int(grid, "z", &z);
+            performanceMetric.gridDimList[i].x = (uint32_t) x;
+            performanceMetric.gridDimList[i].y = (uint32_t) y;
+            performanceMetric.gridDimList[i].z = (uint32_t) z;
+        }
+    }
+}
+
+void startPerfTuner(DecoderMetadata decoderMetadata) {
+    int i, j;
+    time_t start_t, end_t;
+    double diff_t;
+    struct timespec tstart = {0, 0}, tend = {0, 0};
+
+    printf("Starting Performance Tuning For GPU\n");
+    printf("===================================\n\n");
+    fflush(stdout);
+    for (i = 0; i < performanceMetricCount; i++) {
+        CudaDim gridDim = performanceMetric.gridDimList[i];
+        CudaDim blockDim = performanceMetric.blockDimList[i];
+        decoderMetadata.gridDim = gridDim;
+        decoderMetadata.blockDim = blockDim;
+        printf("Block Size {x,y,z} - {%d, %d, %d} | Grid Size {x,y,z} - {%d, %d, %d} \n",
+               blockDim.x, blockDim.y, blockDim.z, gridDim.x, gridDim.y, gridDim.z);
+        printf("Number of packets being decoded - %d\n\n", decoderMetadata.size);
+        fflush(stdout);
+        time(&start_t);
+        clock_gettime(CLOCK_MONOTONIC, &tstart);
+
+        for (j = 0; j < tunerLoopCount; j++) {
+            decodeGpu(decoderMetadata);
+        }
+
+        time(&end_t);
+        clock_gettime(CLOCK_MONOTONIC, &tend);
+        diff_t = (((double) tend.tv_sec + 1.0e-9 * tend.tv_nsec) - ((double) tstart.tv_sec + 1.0e-9 * tstart.tv_nsec)) /
+                 tunerLoopCount;
+        printf(" TimeTaken %.5f \n", diff_t);
+        printf(" =====================\n");
+        fflush(stdout);
+    }
+    fflush(stdout);
 }
 
 CudaDecodedContext *decodeGpu(DecoderMetadata decoderMetadata) {
@@ -37,7 +177,8 @@ CudaDecodedContext *decodeGpu(DecoderMetadata decoderMetadata) {
     }
 
     CudaDecodedContext *decodedPduStructList = malloc(sizeof(CudaDecodedContext) * size);
-    CudaMetadata metadata = {size, pduBuffers, pduContexts, decodedPduStructList, (uint64_t) bufferCapacity};
+    CudaMetadata metadata = {size, pduBuffers, pduContexts, decodedPduStructList, (uint64_t) bufferCapacity,
+                             decoderMetadata.blockDim, decoderMetadata.gridDim};
     decodeCuda(metadata);
     return decodedPduStructList;
 }

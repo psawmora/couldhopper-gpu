@@ -9,6 +9,14 @@ extern "C" {
 #endif
 /*
  * Class:     com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder
+ * Method:    startTuner
+ * Signature:  (Ljava/nio/ByteBuffer;II)V;
+ */
+JNIEXPORT void JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder_startTuner
+  (JNIEnv *, jobject, jobject, jint, jint);
+
+/*
+ * Class:     com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder
  * Method:    decodePDU
  * Signature: (Ljava/util/List;)Ljava/util/List;
  */
@@ -29,7 +37,7 @@ JNIEXPORT jobject JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_Defa
  * Signature: ()V
  */
 JNIEXPORT void JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder_initialize
-  (JNIEnv *, jobject);
+  (JNIEnv *, jobject, jstring);
 
 #ifdef __cplusplus
 }

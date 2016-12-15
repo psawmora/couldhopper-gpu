@@ -38,14 +38,16 @@ static struct timespec tstart = {0, 0}, tend = {0, 0};
 log4c_category_t *statLogger;
 
 JNIEXPORT void JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder_initialize
-        (JNIEnv *env, jobject thisObj) {
-    printf("Caching JClass , JMethodId and JFieldId values.\n");
+        (JNIEnv *env, jobject thisObj, jstring configurationFilePath) {
+    printf("Caching JClass 1, JMethodId and JFieldId values.\n");
     cacheJClass(env);
     cacheJMethod(env);
     cacheJField(env);
     statLogger = log4c_category_get("stat_logger");
     log4c_init();
-    CodecConfiguration configuration = {4000, 200 * 4000};
+    jboolean isCopy = 1;
+    const char *propertyFilePath = (*env)->GetStringUTFChars(env, configurationFilePath, &isCopy);
+    CodecConfiguration configuration = {propertyFilePath};
     init(&configuration);
 }
 
@@ -56,6 +58,17 @@ JNIEXPORT jobject JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_Defa
     return decodePduDirect(env, pduContainerBuffer, size, correlationIdLength);
 }
 
+JNIEXPORT void JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder_startTuner(
+        JNIEnv *env, jobject thisObj, jobject pduContainerBuffer, jint size, jint correlationIdLength) {
+    log4c_category_log(statLogger, LOG4C_PRIORITY_DEBUG, "Performance tuning started for GPU");
+    printf("Starting performance tuning \n");
+    fflush(stdout);
+    jlong bufferCapacity = (*env)->GetDirectBufferCapacity(env, pduContainerBuffer);
+    uint8_t *pduBuffers = (uint8_t *) (*env)->GetDirectBufferAddress(env, pduContainerBuffer);
+    DecoderMetadata decoderMetadata = {pduBuffers, (uint32_t) size, (uint64_t) bufferCapacity, (uint32_t) correlationIdLength};
+    startPerfTuner(decoderMetadata);
+}
+
 jobject
 decodeWithCuda(JNIEnv *env, jobject pduContainerBuffer, jint size, jint correlationIdLength) {
     log4c_category_log(statLogger, LOG4C_PRIORITY_DEBUG, "Decoding Cuda");
@@ -63,6 +76,8 @@ decodeWithCuda(JNIEnv *env, jobject pduContainerBuffer, jint size, jint correlat
     jlong bufferCapacity = (*env)->GetDirectBufferCapacity(env, pduContainerBuffer);
     uint8_t *pduBuffers = (uint8_t *) (*env)->GetDirectBufferAddress(env, pduContainerBuffer);
     DecoderMetadata decoderMetadata = {pduBuffers, (uint32_t) size, (uint64_t) bufferCapacity, (uint32_t) correlationIdLength};
+    decoderMetadata.blockDim = blockDimProdction;
+    decoderMetadata.gridDim = gridDimProduction;
     CudaDecodedContext *decodedPduStructList = decodeGpu(decoderMetadata);
 
     time(&end_t);
@@ -140,7 +155,7 @@ decodeWithPthread(JNIEnv *env, jobject pduContainerBuffer, jint size, jint corre
                                                         decodedContextContainerMethod);
     jmethodID addDecodedContextMethodId = jmethodCache.addDecodedContextMethodId;
     int i;
-    for (i = 0; i < size; i++) {
+    for (i = 0; i < 1; i++) {
         DecodedContext *decodedContext = &decodedPduStructList[i];
         if (decodedContext != 0) {
             jobject *pdu = createPdu(env, decodedContext);

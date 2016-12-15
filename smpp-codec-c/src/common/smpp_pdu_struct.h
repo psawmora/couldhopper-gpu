@@ -13,13 +13,13 @@
 #include "pdu_common_struct.h"
 #include "com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder.h"
 
-#ifdef PTHREAD_DECODER
+/*#ifdef PTHREAD_DECODER
 #define decodePduDirect(env, pduContainerBuffer, size, correlationIdLength) decodeWithPthread(env, pduContainerBuffer, size, correlationIdLength)
 #elif CUDA_DECODER
 #define decodePduDirect(env, pduContainerBuffer, size, correlationIdLength) decodeWithCuda(env, pduContainerBuffer, size, correlationIdLength)
 #else
 #define decodePduDirect(env, pduContainerBuffer, size, correlationIdLength) decodeWithCuda(env, pduContainerBuffer, size, correlationIdLength)
-#endif
+#endif*/
 
 typedef struct jmethod_cache {
     jmethodID listSizeMethod;

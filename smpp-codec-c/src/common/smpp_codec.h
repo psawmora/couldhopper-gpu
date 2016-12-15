@@ -10,28 +10,33 @@
 #include "smpp_pdu_struct.h"
 #include "smpp_pdu_struct_cuda.h"
 
+extern int useGpu;
+extern CudaDim blockDimProdction;
+extern CudaDim gridDimProduction;
+
+
 typedef struct decoder_metadata_struct {
     uint8_t *pduBuffers;
     uint32_t size;
     uint64_t bufferCapacity;
     uint32_t correlationIdLength;
+    CudaDim blockDim;
+    CudaDim gridDim;
 } DecoderMetadata;
 
 typedef enum codec_mode {
-    PERFORMANCE_TUNE, PRODUCTION
+    TUNER, PRODUCTION
 } CodecMode;
 
 typedef struct codec_configuration_struct {
-//    char *propertyFileName;
-//    char *propertyFilePath;
-//    CodecMode mode;
-    uint32_t pduContextInitSize;
-    uint64_t pduBufferInitSize;
+    const char *propertyFilePath;
 } CodecConfiguration;
 
 void init(CodecConfiguration *configuration);
 
 CudaDecodedContext *decodeGpu(DecoderMetadata decoderMetadata);
+
+void startPerfTuner(DecoderMetadata decoderMetadata);
 
 DecodedContext *decodePthread(DecoderMetadata decoderMetadata);
 
@@ -40,6 +45,6 @@ DecodedContext *decodePthread(DecoderMetadata decoderMetadata);
 #elif CUDA_DECODER
 #define decodePduDirect(env, pduContainerBuffer, size, correlationIdLength) decodeWithCuda(env, pduContainerBuffer, size, correlationIdLength)
 #else
-#define decodePduDirect(env, pduContainerBuffer, size, correlationIdLength) decodeWithPthread(env, pduContainerBuffer, size, correlationIdLength)
+#define decodePduDirect(env, pduContainerBuffer, size, correlationIdLength) decodeWithCuda(env, pduContainerBuffer, size, correlationIdLength)
 #endif
 #endif
