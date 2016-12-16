@@ -121,7 +121,7 @@ void decodeCuda(CudaMetadata cudaMetadata) {
     cudaMemcpy(pduContexts_d, pduContexts, sizeof(CudaPduContext) * nPduContext, cudaMemcpyHostToDevice);
 
     CudaDim block = cudaMetadata.blockDim;
-    printf("Cuda Block Dim | x - %d\n", block.x);
+//    printf("Cuda Block Dim | x - %d\n", block.x);
     CudaDim grid = cudaMetadata.gridDim;
     dim3 gridDim(grid.x, grid.y, grid.z);
     dim3 blockDim(block.x, block.y, block.z);
@@ -139,5 +139,5 @@ void decodeCuda(CudaMetadata cudaMetadata) {
 //    cudaFree(pduContexts_d);
 //    cudaFree(pduBuffer_d);
 
-    printf("Cuda SMPP decoding completed\n");
+//    printf("Cuda SMPP decoding completed\n");
 }

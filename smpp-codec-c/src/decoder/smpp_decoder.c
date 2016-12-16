@@ -64,11 +64,11 @@ void *decodeSingle(DirectPduContext *pduContext) {
     smppHeader->commandStatus = readUint32(bufferContext);
     smppHeader->sequenceNumber = readUint32(bufferContext);
 
-    printf("Limit - %ld\n", bufferContext->limit);
-    printf("CommandLength - %d\n", smppHeader->commandLength);
-    printf("CommandId - %d\n", smppHeader->commandId);
-    printf("CommandStatus - %d\n", smppHeader->commandStatus);
-    printf("SequenceNumber - %d\n", smppHeader->sequenceNumber);
+//    printf("Limit - %ld\n", bufferContext->limit);
+//    printf("CommandLength - %d\n", smppHeader->commandLength);
+//    printf("CommandId - %d\n", smppHeader->commandId);
+//    printf("CommandStatus - %d\n", smppHeader->commandStatus);
+//    printf("SequenceNumber - %d\n", smppHeader->sequenceNumber);
     if (smppHeader->commandId == 4) {
         SubmitSmReq *submitSmReq = decodeSubmitSm(pduContext, bufferContext);
         submitSmReq->header = smppHeader;
@@ -128,21 +128,21 @@ DecodedTlvContext decodeTlv(ByteBufferContext *context) {
     DecodedTlvContext decodedTlvContext;
     uint16_t tlvCount = 0;
     Tlv *tlvList = malloc(sizeof(Tlv) * 10); // This need to be a dynamic list.
-    printf("Tlv read-index - %d | limit - %d\n", context->readIndex, context->limit);
+//    printf("Tlv read-index - %d | limit - %d\n", context->readIndex, context->limit);
     while ((context->readIndex - context->initialReadIndex) < context->limit - 4 && tlvCount < 10) {
         uint16_t tag = readUint16(context);
-        printf("tlv count  - %d\n", tlvCount);
-        printf("tag - %d\n", tag);
+//        printf("tlv count  - %d\n", tlvCount);
+//        printf("tag - %d\n", tag);
         uint32_t length = readUint16(context);
-        printf("length - %d\n", length);
+//        printf("length - %d\n", length);
         if ((context->readIndex - context->initialReadIndex) <= context->limit - length) {
             uint8_t *value = readNBytes(context, length);
-            printf("VALUEEEEEEEEEEEEEEEEEEEEEEEEEE - %s\n", value);
+//            printf("VALUEEEEEEEEEEEEEEEEEEEEEEEEEE - %s\n", value);
             Tlv tlv = {tag, length, value};
             tlvList[tlvCount] = tlv;
             tlvCount++;
         } else {
-            printf("Tlv remaining - %d - %d\n", (context->readIndex - context->initialReadIndex), context->limit - length);
+//            printf("Tlv remaining - %d - %d\n", (context->readIndex - context->initialReadIndex), context->limit - length);
             break;
         }
     }
@@ -152,7 +152,7 @@ DecodedTlvContext decodeTlv(ByteBufferContext *context) {
 }
 
 void printAddress(Address *address) {
-    printf("ton - %d\n", address->ton);
-    printf("npi - %d\n", address->npi);
-    printf("address - %s\n\n\n", (char *) address->addressValue);
+//    printf("ton - %d\n", address->ton);
+//    printf("npi - %d\n", address->npi);
+//    printf("address - %s\n\n\n", (char *) address->addressValue);
 }

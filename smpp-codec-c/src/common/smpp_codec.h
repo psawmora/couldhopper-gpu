@@ -13,6 +13,7 @@
 extern int useGpu;
 extern CudaDim blockDimProdction;
 extern CudaDim gridDimProduction;
+extern int nCpuCores;
 
 
 typedef struct decoder_metadata_struct {
@@ -37,6 +38,8 @@ void init(CodecConfiguration *configuration);
 CudaDecodedContext *decodeGpu(DecoderMetadata decoderMetadata);
 
 void startPerfTuner(DecoderMetadata decoderMetadata);
+
+void startPerfTunerPthread(DecoderMetadata decoderMetadata);
 
 DecodedContext *decodePthread(DecoderMetadata decoderMetadata);
 

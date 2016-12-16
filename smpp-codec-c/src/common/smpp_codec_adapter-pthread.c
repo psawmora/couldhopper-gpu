@@ -44,7 +44,6 @@ JNIEXPORT void JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_Default
     cacheJMethod(env);
     cacheJField(env);
     statLogger = log4c_category_get("stat_logger");
-    log4c_init();
     jboolean isCopy = 1;
     const char *propertyFilePath = (*env)->GetStringUTFChars(env, configurationFilePath, &isCopy);
     CodecConfiguration configuration = {propertyFilePath};
@@ -60,13 +59,17 @@ JNIEXPORT jobject JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_Defa
 
 JNIEXPORT void JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder_startTuner(
         JNIEnv *env, jobject thisObj, jobject pduContainerBuffer, jint size, jint correlationIdLength) {
-    log4c_category_log(statLogger, LOG4C_PRIORITY_DEBUG, "Performance tuning started for GPU");
+    log4c_category_log(statLogger, LOG4C_PRIORITY_DEBUG, "Preparing for performance tuning .....");
     printf("Starting performance tuning \n");
     fflush(stdout);
     jlong bufferCapacity = (*env)->GetDirectBufferCapacity(env, pduContainerBuffer);
     uint8_t *pduBuffers = (uint8_t *) (*env)->GetDirectBufferAddress(env, pduContainerBuffer);
     DecoderMetadata decoderMetadata = {pduBuffers, (uint32_t) size, (uint64_t) bufferCapacity, (uint32_t) correlationIdLength};
-    startPerfTuner(decoderMetadata);
+    if (useGpu) {
+        startPerfTuner(decoderMetadata);
+    } else {
+        startPerfTunerPthread(decoderMetadata);
+    }
 }
 
 jobject

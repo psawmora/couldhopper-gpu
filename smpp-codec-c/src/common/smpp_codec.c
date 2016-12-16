@@ -4,12 +4,16 @@
 int useGpu = 0;
 CudaDim blockDimProdction;
 CudaDim gridDimProduction;
+int nCpuCores = 2;
 
 static CudaPduContext *cudaPduContext; // Pre-allocate Cuda-Context for decoding;
 
 static uint32_t currentCudaContextSize;
 
 static CodecMode currentMode;
+
+static log4c_category_t *gpuTunerCategory;
+static log4c_category_t *cpuTunerCategory;
 
 static int maxPacketSize = 100;
 static int maxBatchSize = 10000;
@@ -30,8 +34,11 @@ void configureTuner(config_t *propConfig);
 void init(CodecConfiguration *configuration) {
     // Need to initialize loggers.
     // Then need to pre-allocate pinned memory and Cuda Global Memory.
-    currentMode = PRODUCTION;
+    gpuTunerCategory = log4c_category_get("performance_tuning_gpu_logger");
+    cpuTunerCategory = log4c_category_get("performance_tuning_cpu_logger");
+    log4c_init();
 
+    currentMode = PRODUCTION;
     config_t propConfig;
     config_init(&propConfig);
     if (!config_read_file(&propConfig, configuration->propertyFilePath)) {
@@ -45,6 +52,8 @@ void init(CodecConfiguration *configuration) {
     config_lookup_int(&propConfig, "max_packet_size", &maxPacketSize);
     config_lookup_int(&propConfig, "max_batch_size", &maxBatchSize);
     config_lookup_int(&propConfig, "tuner_loop_count", &tunerLoopCount);
+    config_lookup_int(&propConfig, "number_of_cpu_cores", &nCpuCores);
+
     currentCudaContextSize = (uint32_t) maxBatchSize;
     cudaPduContext = allocatePinnedPduContext(maxBatchSize);
     initCudaParameters((uint32_t) maxBatchSize, ((uint64_t) maxPacketSize * (uint64_t) maxBatchSize));
@@ -116,38 +125,61 @@ void configureTuner(config_t *propConfig) {
     }
 }
 
+void startPerfTunerPthread(DecoderMetadata decoderMetadata) {
+    log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO, "Starting Performance Tuning For CPU\n");
+    log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO, "===================================\n\n");
+    int i, j;
+    time_t start_t, end_t;
+    double diff_t;
+    struct timespec tstart = {0, 0}, tend = {0, 0};
+    time(&start_t);
+    clock_gettime(CLOCK_MONOTONIC, &tstart);
+    log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO,
+                       "Number of packets being decoded - %d\n\n", decoderMetadata.size);
+    for (i = 0; i < tunerLoopCount; i++) {
+        DecodedContext *pStruct = decodePthread(decoderMetadata);
+        free(pStruct);
+    }
+    time(&end_t);
+    clock_gettime(CLOCK_MONOTONIC, &tend);
+    diff_t = (((double) tend.tv_sec + 1.0e-9 * tend.tv_nsec) - ((double) tstart.tv_sec + 1.0e-9 * tstart.tv_nsec)) /
+             tunerLoopCount;
+    log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO, "TimeTaken - %.5f \n", diff_t);
+    log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO, " =====================\n");
+}
+
 void startPerfTuner(DecoderMetadata decoderMetadata) {
     int i, j;
     time_t start_t, end_t;
     double diff_t;
     struct timespec tstart = {0, 0}, tend = {0, 0};
 
-    printf("Starting Performance Tuning For GPU\n");
-    printf("===================================\n\n");
-    fflush(stdout);
+    log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "Starting Performance Tuning For GPU\n");
+    log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "===================================\n\n");
     for (i = 0; i < performanceMetricCount; i++) {
         CudaDim gridDim = performanceMetric.gridDimList[i];
         CudaDim blockDim = performanceMetric.blockDimList[i];
         decoderMetadata.gridDim = gridDim;
         decoderMetadata.blockDim = blockDim;
-        printf("Block Size {x,y,z} - {%d, %d, %d} | Grid Size {x,y,z} - {%d, %d, %d} \n",
-               blockDim.x, blockDim.y, blockDim.z, gridDim.x, gridDim.y, gridDim.z);
-        printf("Number of packets being decoded - %d\n\n", decoderMetadata.size);
-        fflush(stdout);
+        log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO,
+                           "Block Size {x,y,z} - {%d, %d, %d} | Grid Size {x,y,z} - {%d, %d, %d} \n",
+                           blockDim.x, blockDim.y, blockDim.z, gridDim.x, gridDim.y, gridDim.z);
+        log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO,
+                           "Number of packets being decoded - %d\n\n", decoderMetadata.size);
         time(&start_t);
         clock_gettime(CLOCK_MONOTONIC, &tstart);
 
         for (j = 0; j < tunerLoopCount; j++) {
-            decodeGpu(decoderMetadata);
+            CudaDecodedContext *pStruct = decodeGpu(decoderMetadata);
+            free(pStruct);
         }
 
         time(&end_t);
         clock_gettime(CLOCK_MONOTONIC, &tend);
         diff_t = (((double) tend.tv_sec + 1.0e-9 * tend.tv_nsec) - ((double) tstart.tv_sec + 1.0e-9 * tstart.tv_nsec)) /
                  tunerLoopCount;
-        printf(" TimeTaken %.5f \n", diff_t);
-        printf(" =====================\n");
-        fflush(stdout);
+        log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "TimeTaken - %.5f \n", diff_t);
+        log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, " =====================\n");
     }
     fflush(stdout);
 }
@@ -168,10 +200,6 @@ CudaDecodedContext *decodeGpu(DecoderMetadata decoderMetadata) {
         strncpy(pduContexts[i].correlationId, correlationId, sizeof(char) * (correlationIdLength + 1));
         pduContexts[i].start = (uint32_t) startIndex;
         pduContexts[i].length = pduLength;
-        /*
-                printf("CorrelationId 1 - %s | CorrelationId 2 - %s | start-position - %d| pdu length -  %d | Read Index - %ld \n",
-                       correlationId, pduContexts[i].correlationId, startPosition, pduLength, byteBufferContext.readIndex);
-        */
         startPosition += (correlationIdLength + pduLength);
         byteBufferContext.readIndex = (uint64_t) startPosition;
     }
@@ -203,14 +231,10 @@ DecodedContext *decodePthread(DecoderMetadata decoderMetadata) {
         pduContexts[i].start = startIndex;
         pduContexts[i].length = pduLength;
         startPosition += (correlationIdLength + pduLength);
-        /*
-                printf("CorrelationId - %s | Read Index - %d |  pdu length -  %d | start-position - %d\n",
-                       correlationId, byteBufferContext.readIndex, pduLength, startPosition);
-        */
         byteBufferContext.readIndex = startPosition;
     }
 
-    int nThread = N_THREAD;
+    int nThread = nCpuCores;
     int index = 0;
     int batchSize = size > nThread ? size / nThread : size;
     DecodedContext *decodedPduStructList = malloc(sizeof(DecodedContext) * size);
