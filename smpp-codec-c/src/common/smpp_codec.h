@@ -51,3 +51,4 @@ DecodedContext *decodePthread(DecoderMetadata decoderMetadata);
 #define decodePduDirect(env, pduContainerBuffer, size, correlationIdLength) decodeWithCuda(env, pduContainerBuffer, size, correlationIdLength)
 #endif
 #endif
+// nvprof --analysis-metrics -o  nbody-analysis.nvprof bin/smpp-server console --profile-child-processes --benchmark -numdevices=2 -i=1

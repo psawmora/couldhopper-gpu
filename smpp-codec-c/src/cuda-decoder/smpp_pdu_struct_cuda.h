@@ -1,8 +1,19 @@
+#include <stdalign.h>
 #include "pdu_common_struct.h"
 
 #ifndef SMPP_PDU_STRUCT_CUDA
 #define SMPP_PDU_STRUCT_CUDA
 #define MAX_CORRELATION_LENGTH 20
+
+#if defined(__CUDACC__) // NVCC
+#define MY_ALIGN(n) __align__(n)
+#elif defined(__GNUC__) // GCC
+#define MY_ALIGN(n) __attribute__((aligned(n)))
+#elif defined(_MSC_VER) // MSVC
+#define MY_ALIGN(n) __declspec(align(n))
+#else
+#error "Please provide a definition for MY_ALIGN macro for your host compiler!"
+#endif
 
 typedef struct cuda_pdu_context_direct_struct {
     uint32_t start;

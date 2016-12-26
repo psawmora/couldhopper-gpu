@@ -266,7 +266,7 @@ jobject *createPdu(JNIEnv *env, DecodedContext *decodedContext) {
             jbyteArray shortMsgArray = (*env)->NewByteArray(env, submitSmReq.smLength);
             (*env)->SetByteArrayRegion(env, shortMsgArray, 0, submitSmReq.smLength, (const jbyte *) submitSmReq.shortMessage);
             (*env)->CallObjectMethod(env, submitSmObject, setShortMessage, shortMsgArray);
-            printf("Short Message- %s\n", submitSmReq.shortMessage);
+//            printf("Short Message- %s\n", submitSmReq.shortMessage);
         }
         return submitSmObject;
     }
@@ -277,23 +277,23 @@ jobject *createPduOnCuda(JNIEnv *env, CudaDecodedContext *decodedContext) {
     printf("SMPP PDU type %d\n", decodedContext->commandId);
     if (decodedContext->commandId == 4) {
         CudaSubmitSmReq submitSmReq = decodedContext->pduStruct;
-        printf("SubmitSm Request - %d\n", submitSmReq.esmClass);
-        printf("SubmitSm setCommandLength - %ld\n", submitSmReq.header.commandLength);
+//        printf("SubmitSm Request - %d\n", submitSmReq.esmClass);
+//        printf("SubmitSm setCommandLength - %ld\n", submitSmReq.header.commandLength);
         jclass submitSmClass = jClassCache.submitSmClass;
 //        printf("SubmitSm class found - %s\n", submitSmClass);
 
         jmethodID constructor = jmethodCache.constructor;
         jobject submitSmObject = (*env)->NewObject(env, submitSmClass, constructor);
 
-        printf("SubmitSm setCommandLength - %d\n", submitSmReq.header.commandLength);
+//        printf("SubmitSm setCommandLength - %d\n", submitSmReq.header.commandLength);
         jmethodID setCommandLength = jmethodCache.setCommandLength;
         (*env)->CallObjectMethod(env, submitSmObject, setCommandLength, submitSmReq.header.commandLength);
 
-        printf("SubmitSm setCommandStatus - %d\n", submitSmReq.header.commandStatus);
+//        printf("SubmitSm setCommandStatus - %d\n", submitSmReq.header.commandStatus);
         jmethodID setCommandStatus = jmethodCache.setCommandStatus;
         (*env)->CallObjectMethod(env, submitSmObject, setCommandStatus, submitSmReq.header.commandStatus);
 
-        printf("SubmitSm sequenceNumber - %d\n", submitSmReq.header.sequenceNumber);
+//        printf("SubmitSm sequenceNumber - %d\n", submitSmReq.header.sequenceNumber);
         jmethodID setSequenceNumber = jmethodCache.setSequenceNumber;
         (*env)->CallObjectMethod(env, submitSmObject, setSequenceNumber, submitSmReq.header.sequenceNumber);
 
@@ -309,11 +309,11 @@ jobject *createPduOnCuda(JNIEnv *env, CudaDecodedContext *decodedContext) {
 //        printf("SubmitSm Destination Address - %s\n", submitSmReq.destinationAddress.addressValue);
         jmethodID setDestAddress = jmethodCache.setDestAddress;
         (*env)->CallObjectMethod(env, submitSmObject, setDestAddress, getCudaAddress(env, &submitSmReq.destinationAddress));
-        printf("SubmitSm Destination Address - %s\n", submitSmReq.destinationAddress.addressValue);
+//        printf("SubmitSm Destination Address - %s\n", submitSmReq.destinationAddress.addressValue);
 
         jmethodID setEsmClass = jmethodCache.setEsmClass;
         (*env)->CallObjectMethod(env, submitSmObject, setEsmClass, submitSmReq.esmClass);
-        printf("Esm Class - %d\n", submitSmReq.esmClass);
+//        printf("Esm Class - %d\n", submitSmReq.esmClass);
 
         jmethodID setProtocolId = jmethodCache.setProtocolId;
         (*env)->CallObjectMethod(env, submitSmObject, setProtocolId, submitSmReq.protocolId);
@@ -342,14 +342,14 @@ jobject *createPduOnCuda(JNIEnv *env, CudaDecodedContext *decodedContext) {
 
         jmethodID setDefaultMsgId = jmethodCache.setDefaultMsgId;
         (*env)->CallObjectMethod(env, submitSmObject, setDefaultMsgId, submitSmReq.defaultMsgId);
-        printf("Msg Id - %d\n", submitSmReq.defaultMsgId);
+//        printf("Msg Id - %d\n", submitSmReq.defaultMsgId);
         if (submitSmReq.smLength > 0) {
-            printf("Message Exists- %d\n", submitSmReq.smLength);
+//            printf("Message Exists- %d\n", submitSmReq.smLength);
             jmethodID setShortMessage = jmethodCache.setShortMessage;
             jbyteArray shortMsgArray = (*env)->NewByteArray(env, submitSmReq.smLength);
             (*env)->SetByteArrayRegion(env, shortMsgArray, 0, submitSmReq.smLength, (const jbyte *) submitSmReq.shortMessage);
             (*env)->CallObjectMethod(env, submitSmObject, setShortMessage, shortMsgArray);
-            printf("Short Message- %s\n", submitSmReq.shortMessage);
+//            printf("Short Message- %s\n", submitSmReq.shortMessage);
         }
         return submitSmObject;
     }
