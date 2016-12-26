@@ -61,6 +61,7 @@ typedef struct jclass_cache {
     jclass pduContextClass;
     jclass decodedPduContextClass;
     jclass submitSmClass;
+    jclass deliverSmClass;
     jclass addressClass;
 } JclassCache;
 
@@ -121,7 +122,7 @@ typedef struct base_sm_req_struct {
     uint8_t *shortMessage;
     uint16_t tlvCount;
     Tlv *tlvList;
-} SubmitSmReq;
+} BaseSmReq;
 
 typedef struct thread_param {
     int startIndex;

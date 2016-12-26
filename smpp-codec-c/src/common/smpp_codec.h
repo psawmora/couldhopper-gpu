@@ -14,6 +14,7 @@ extern int useGpu;
 extern CudaDim blockDimProdction;
 extern CudaDim gridDimProduction;
 extern int nCpuCores;
+extern int cpuDecodeThreshold;
 
 
 typedef struct decoder_metadata_struct {

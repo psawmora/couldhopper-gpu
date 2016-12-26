@@ -13,7 +13,7 @@ Created by prabath on 6/26/16.
 
 void printAddress(Address *address);
 
-SubmitSmReq *decodeSubmitSm(PduContext *pduContext, ByteBufferContext *context);
+BaseSmReq *decodeBaseSm(PduContext *pduContext, ByteBufferContext *context);
 
 typedef struct DecodedTlvContextStruct {
     Tlv *tlvList;
@@ -69,11 +69,11 @@ void *decodeSingle(DirectPduContext *pduContext) {
 //    printf("CommandId - %d\n", smppHeader->commandId);
 //    printf("CommandStatus - %d\n", smppHeader->commandStatus);
 //    printf("SequenceNumber - %d\n", smppHeader->sequenceNumber);
-    if (smppHeader->commandId == 4) {
-        SubmitSmReq *submitSmReq = decodeSubmitSm(pduContext, bufferContext);
+    if (smppHeader->commandId == 4 || smppHeader->commandId == 5) {
+        BaseSmReq *submitSmReq = decodeBaseSm(pduContext, bufferContext);
         submitSmReq->header = smppHeader;
         DecodedContext *decodedContext = malloc(sizeof(DecodedContext));
-        decodedContext->commandId = 4;
+        decodedContext->commandId = smppHeader->commandId;
         decodedContext->pduStruct = submitSmReq;
         decodedContext->correlationId = pduContext->correlationId;
         return decodedContext;
@@ -81,10 +81,10 @@ void *decodeSingle(DirectPduContext *pduContext) {
     return 0;
 }
 
-SubmitSmReq *decodeSubmitSm(PduContext *pduContext, ByteBufferContext *context) {
+BaseSmReq *decodeBaseSm(PduContext *pduContext, ByteBufferContext *context) {
     ByteBufferContext bufferContext = *context;
 //    printf("Decoding SubmitSm\n");
-    SubmitSmReq *submitSm = malloc(sizeof(SubmitSmReq));
+    BaseSmReq *submitSm = malloc(sizeof(BaseSmReq));
     submitSm->serviceType = readNullTerminatedString(&bufferContext, 6);
 /*
     if (submitSm->serviceType != -1) {

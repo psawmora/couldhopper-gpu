@@ -54,7 +54,14 @@ JNIEXPORT jobject JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_Defa
         (JNIEnv *env, jobject thisObj, jobject pduContainerBuffer, jint size, jint correlationIdLength) {
     time(&start_t);
     clock_gettime(CLOCK_MONOTONIC, &tstart);
-    return decodePduDirect(env, pduContainerBuffer, size, correlationIdLength);
+    if(cpuDecodeThreshold == 0){
+     return decodePduDirect(env, pduContainerBuffer, size, correlationIdLength);
+    }
+    if(size < cpuDecodeThreshold){
+      return decodeWithPthread(env, pduContainerBuffer, size, correlationIdLength);
+    } else {
+          return decodeWithCuda(env, pduContainerBuffer, size, correlationIdLength);
+    }
 }
 
 JNIEXPORT void JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder_startTuner(
@@ -193,165 +200,168 @@ decodeWithPthread(JNIEnv *env, jobject pduContainerBuffer, jint size, jint corre
 
 jobject *createPdu(JNIEnv *env, DecodedContext *decodedContext) {
     printf("SMPP PDU type %d\n", decodedContext->commandId);
-    if (decodedContext->commandId == 4) {
-        SubmitSmReq submitSmReq = *(SubmitSmReq *) decodedContext->pduStruct;
-        printf("SubmitSm Request - %d\n", submitSmReq.esmClass);
-        printf("SubmitSm setCommandLength - %d\n", submitSmReq.header->commandLength);
-        jclass submitSmClass = jClassCache.submitSmClass;
-//        printf("SubmitSm class found - %s\n", submitSmClass);
+    if (decodedContext->commandId == 4 || decodedContext->commandId == 5) {
+        BaseSmReq baseSmReq = *(BaseSmReq *) decodedContext->pduStruct;
+        printf("BaseSm Request - %d\n", baseSmReq.esmClass);
+        printf("BaseSm setCommandLength - %d\n", baseSmReq.header->commandLength);
+
+        jclass baseSmClass;
+        baseSmClass = (decodedContext->commandId == 4) ? jClassCache.submitSmClass : jClassCache.deliverSmClass;
+//        printf("SubmitSm class found - %s\n", baseSmClass);
 
         jmethodID constructor = jmethodCache.constructor;
-        jobject submitSmObject = (*env)->NewObject(env, submitSmClass, constructor);
+        jobject baseSmObject = (*env)->NewObject(env, baseSmClass, constructor);
 
-        printf("SubmitSm setCommandLength - %d\n", submitSmReq.header->commandLength);
+        printf("BaseSm setCommandLength - %d\n", baseSmReq.header->commandLength);
         jmethodID setCommandLength = jmethodCache.setCommandLength;
-        (*env)->CallObjectMethod(env, submitSmObject, setCommandLength, submitSmReq.header->commandLength);
+        (*env)->CallObjectMethod(env, baseSmObject, setCommandLength, baseSmReq.header->commandLength);
 
-        printf("SubmitSm setCommandStatus - %d\n", submitSmReq.header->commandStatus);
+        printf("BaseSm setCommandStatus - %d\n", baseSmReq.header->commandStatus);
         jmethodID setCommandStatus = jmethodCache.setCommandStatus;
-        (*env)->CallObjectMethod(env, submitSmObject, setCommandStatus, submitSmReq.header->commandStatus);
+        (*env)->CallObjectMethod(env, baseSmObject, setCommandStatus, baseSmReq.header->commandStatus);
 
-        printf("SubmitSm sequenceNumber - %d\n", submitSmReq.header->sequenceNumber);
+        printf("BaseSm sequenceNumber - %d\n", baseSmReq.header->sequenceNumber);
         jmethodID setSequenceNumber = jmethodCache.setSequenceNumber;
-        (*env)->CallObjectMethod(env, submitSmObject, setSequenceNumber, submitSmReq.header->sequenceNumber);
+        (*env)->CallObjectMethod(env, baseSmObject, setSequenceNumber, baseSmReq.header->sequenceNumber);
 
-        printf("SubmitSm service type- %s\n", submitSmReq.serviceType);
+        printf("BaseSm service type- %s\n", baseSmReq.serviceType);
         jmethodID setServiceType = jmethodCache.setServiceType;
-        (*env)->CallObjectMethod(env, submitSmObject, setServiceType,
-                                 (*env)->NewStringUTF(env, submitSmReq.serviceType));
+        (*env)->CallObjectMethod(env, baseSmObject, setServiceType,
+                                 (*env)->NewStringUTF(env, baseSmReq.serviceType));
 
-        printf("SubmitSm Source Address - %s\n", submitSmReq.sourceAddress->addressValue);
+        printf("BaseSm Source Address - %s\n", baseSmReq.sourceAddress->addressValue);
         jmethodID setSourceAddress = jmethodCache.setSourceAddress;
-        jobject *srcAddress = getAddress(env, submitSmReq.sourceAddress);
-        (*env)->CallObjectMethod(env, submitSmObject, setSourceAddress, srcAddress);
+        jobject *srcAddress = getAddress(env, baseSmReq.sourceAddress);
+        (*env)->CallObjectMethod(env, baseSmObject, setSourceAddress, srcAddress);
 
-        printf("SubmitSm Destination ton - %d\n", submitSmReq.destinationAddress->ton);
+        printf("BaseSm Destination ton - %d\n", baseSmReq.destinationAddress->ton);
         jmethodID setDestAddress = jmethodCache.setDestAddress;
-        (*env)->CallObjectMethod(env, submitSmObject, setDestAddress, getAddress(env, submitSmReq.destinationAddress));
-        printf("SubmitSm Destination Address - %s\n", submitSmReq.destinationAddress->addressValue);
+        (*env)->CallObjectMethod(env, baseSmObject, setDestAddress, getAddress(env, baseSmReq.destinationAddress));
+        printf("BaseSm Destination Address - %s\n", baseSmReq.destinationAddress->addressValue);
 
         jmethodID setEsmClass = jmethodCache.setEsmClass;
-        (*env)->CallObjectMethod(env, submitSmObject, setEsmClass, submitSmReq.esmClass);
+        (*env)->CallObjectMethod(env, baseSmObject, setEsmClass, baseSmReq.esmClass);
 
         jmethodID setProtocolId = jmethodCache.setProtocolId;
-        (*env)->CallObjectMethod(env, submitSmObject, setProtocolId, submitSmReq.protocolId);
+        (*env)->CallObjectMethod(env, baseSmObject, setProtocolId, baseSmReq.protocolId);
 
         jmethodID setPriority = jmethodCache.setPriority;
-        (*env)->CallObjectMethod(env, submitSmObject, setPriority, submitSmReq.priority);
+        (*env)->CallObjectMethod(env, baseSmObject, setPriority, baseSmReq.priority);
 
         jmethodID setScheduleDeliveryTime = jmethodCache.setScheduleDeliveryTime;
-        (*env)->CallObjectMethod(env, submitSmObject, setScheduleDeliveryTime,
-                                 (*env)->NewStringUTF(env, submitSmReq.scheduleDeliveryTime));
+        (*env)->CallObjectMethod(env, baseSmObject, setScheduleDeliveryTime,
+                                 (*env)->NewStringUTF(env, baseSmReq.scheduleDeliveryTime));
 
         jmethodID setValidityPeriod = jmethodCache.setValidityPeriod;
-        (*env)->CallObjectMethod(env, submitSmObject, setValidityPeriod,
-                                 (*env)->NewStringUTF(env, submitSmReq.validityPeriod));
+        (*env)->CallObjectMethod(env, baseSmObject, setValidityPeriod,
+                                 (*env)->NewStringUTF(env, baseSmReq.validityPeriod));
 
         jmethodID setRegisteredDelivery = jmethodCache.setRegisteredDelivery;
-        (*env)->CallObjectMethod(env, submitSmObject, setRegisteredDelivery, submitSmReq.registeredDelivery);
+        (*env)->CallObjectMethod(env, baseSmObject, setRegisteredDelivery, baseSmReq.registeredDelivery);
 
         jmethodID setReplaceIfPresent = jmethodCache.setReplaceIfPresent;
-        (*env)->CallObjectMethod(env, submitSmObject, setReplaceIfPresent, submitSmReq.replaceIfPresent);
+        (*env)->CallObjectMethod(env, baseSmObject, setReplaceIfPresent, baseSmReq.replaceIfPresent);
 
 
         jmethodID setDataCoding = jmethodCache.setDataCoding;
-        (*env)->CallObjectMethod(env, submitSmObject, setDataCoding, submitSmReq.dataCoding);
+        (*env)->CallObjectMethod(env, baseSmObject, setDataCoding, baseSmReq.dataCoding);
 
 
         jmethodID setDefaultMsgId = jmethodCache.setDefaultMsgId;
-        (*env)->CallObjectMethod(env, submitSmObject, setDefaultMsgId, submitSmReq.defaultMsgId);
+        (*env)->CallObjectMethod(env, baseSmObject, setDefaultMsgId, baseSmReq.defaultMsgId);
 
-        if (submitSmReq.smLength > 0) {
+        if (baseSmReq.smLength > 0) {
             jmethodID setShortMessage = jmethodCache.setShortMessage;
-            jbyteArray shortMsgArray = (*env)->NewByteArray(env, submitSmReq.smLength);
-            (*env)->SetByteArrayRegion(env, shortMsgArray, 0, submitSmReq.smLength, (const jbyte *) submitSmReq.shortMessage);
-            (*env)->CallObjectMethod(env, submitSmObject, setShortMessage, shortMsgArray);
-//            printf("Short Message- %s\n", submitSmReq.shortMessage);
+            jbyteArray shortMsgArray = (*env)->NewByteArray(env, baseSmReq.smLength);
+            (*env)->SetByteArrayRegion(env, shortMsgArray, 0, baseSmReq.smLength, (const jbyte *) baseSmReq.shortMessage);
+            (*env)->CallObjectMethod(env, baseSmObject, setShortMessage, shortMsgArray);
+//            printf("Short Message- %s\n", baseSmReq.shortMessage);
         }
-        return submitSmObject;
+        return baseSmObject;
     }
     return 0;
 }
 
 jobject *createPduOnCuda(JNIEnv *env, CudaDecodedContext *decodedContext) {
     printf("SMPP PDU type %d\n", decodedContext->commandId);
-    if (decodedContext->commandId == 4) {
-        CudaSubmitSmReq submitSmReq = decodedContext->pduStruct;
-//        printf("SubmitSm Request - %d\n", submitSmReq.esmClass);
-//        printf("SubmitSm setCommandLength - %ld\n", submitSmReq.header.commandLength);
-        jclass submitSmClass = jClassCache.submitSmClass;
+    if (decodedContext->commandId == 4 || decodedContext->commandId == 5) {
+        CudaBaseSmReq baseSmReq = decodedContext->pduStruct;
+//        printf("SubmitSm Request - %d\n", baseSmReq.esmClass);
+//        printf("SubmitSm setCommandLength - %ld\n", baseSmReq.header.commandLength);
+        jclass baseSmClass;
+        baseSmClass = (decodedContext->commandId == 4) ? jClassCache.submitSmClass : jClassCache.deliverSmClass;
 //        printf("SubmitSm class found - %s\n", submitSmClass);
 
         jmethodID constructor = jmethodCache.constructor;
-        jobject submitSmObject = (*env)->NewObject(env, submitSmClass, constructor);
+        jobject baseSmObject = (*env)->NewObject(env, baseSmClass, constructor);
 
-//        printf("SubmitSm setCommandLength - %d\n", submitSmReq.header.commandLength);
+//        printf("SubmitSm setCommandLength - %d\n", baseSmReq.header.commandLength);
         jmethodID setCommandLength = jmethodCache.setCommandLength;
-        (*env)->CallObjectMethod(env, submitSmObject, setCommandLength, submitSmReq.header.commandLength);
+        (*env)->CallObjectMethod(env, baseSmObject, setCommandLength, baseSmReq.header.commandLength);
 
-//        printf("SubmitSm setCommandStatus - %d\n", submitSmReq.header.commandStatus);
+//        printf("SubmitSm setCommandStatus - %d\n", baseSmReq.header.commandStatus);
         jmethodID setCommandStatus = jmethodCache.setCommandStatus;
-        (*env)->CallObjectMethod(env, submitSmObject, setCommandStatus, submitSmReq.header.commandStatus);
+        (*env)->CallObjectMethod(env, baseSmObject, setCommandStatus, baseSmReq.header.commandStatus);
 
-//        printf("SubmitSm sequenceNumber - %d\n", submitSmReq.header.sequenceNumber);
+//        printf("SubmitSm sequenceNumber - %d\n", baseSmReq.header.sequenceNumber);
         jmethodID setSequenceNumber = jmethodCache.setSequenceNumber;
-        (*env)->CallObjectMethod(env, submitSmObject, setSequenceNumber, submitSmReq.header.sequenceNumber);
+        (*env)->CallObjectMethod(env, baseSmObject, setSequenceNumber, baseSmReq.header.sequenceNumber);
 
         jmethodID setServiceType = jmethodCache.setServiceType;
-        (*env)->CallObjectMethod(env, submitSmObject, setServiceType,
-                                 (*env)->NewStringUTF(env, submitSmReq.serviceType));
+        (*env)->CallObjectMethod(env, baseSmObject, setServiceType,
+                                 (*env)->NewStringUTF(env, baseSmReq.serviceType));
 
         jmethodID setSourceAddress = jmethodCache.setSourceAddress;
-        jobject *srcAddress = getCudaAddress(env, &submitSmReq.sourceAddress);
+        jobject *srcAddress = getCudaAddress(env, &baseSmReq.sourceAddress);
 
-        (*env)->CallObjectMethod(env, submitSmObject, setSourceAddress, srcAddress);
+        (*env)->CallObjectMethod(env, baseSmObject, setSourceAddress, srcAddress);
 
-//        printf("SubmitSm Destination Address - %s\n", submitSmReq.destinationAddress.addressValue);
+//        printf("SubmitSm Destination Address - %s\n", baseSmReq.destinationAddress.addressValue);
         jmethodID setDestAddress = jmethodCache.setDestAddress;
-        (*env)->CallObjectMethod(env, submitSmObject, setDestAddress, getCudaAddress(env, &submitSmReq.destinationAddress));
-//        printf("SubmitSm Destination Address - %s\n", submitSmReq.destinationAddress.addressValue);
+        (*env)->CallObjectMethod(env, baseSmObject, setDestAddress, getCudaAddress(env, &baseSmReq.destinationAddress));
+//        printf("SubmitSm Destination Address - %s\n", baseSmReq.destinationAddress.addressValue);
 
         jmethodID setEsmClass = jmethodCache.setEsmClass;
-        (*env)->CallObjectMethod(env, submitSmObject, setEsmClass, submitSmReq.esmClass);
-//        printf("Esm Class - %d\n", submitSmReq.esmClass);
+        (*env)->CallObjectMethod(env, baseSmObject, setEsmClass, baseSmReq.esmClass);
+//        printf("Esm Class - %d\n", baseSmReq.esmClass);
 
         jmethodID setProtocolId = jmethodCache.setProtocolId;
-        (*env)->CallObjectMethod(env, submitSmObject, setProtocolId, submitSmReq.protocolId);
+        (*env)->CallObjectMethod(env, baseSmObject, setProtocolId, baseSmReq.protocolId);
 
         jmethodID setPriority = jmethodCache.setPriority;
-        (*env)->CallObjectMethod(env, submitSmObject, setPriority, submitSmReq.priority);
+        (*env)->CallObjectMethod(env, baseSmObject, setPriority, baseSmReq.priority);
 
         jmethodID setScheduleDeliveryTime = jmethodCache.setScheduleDeliveryTime;
-        (*env)->CallObjectMethod(env, submitSmObject, setScheduleDeliveryTime,
-                                 (*env)->NewStringUTF(env, submitSmReq.scheduleDeliveryTime));
+        (*env)->CallObjectMethod(env, baseSmObject, setScheduleDeliveryTime,
+                                 (*env)->NewStringUTF(env, baseSmReq.scheduleDeliveryTime));
 
         jmethodID setValidityPeriod = jmethodCache.setValidityPeriod;
-        (*env)->CallObjectMethod(env, submitSmObject, setValidityPeriod,
-                                 (*env)->NewStringUTF(env, submitSmReq.validityPeriod));
+        (*env)->CallObjectMethod(env, baseSmObject, setValidityPeriod,
+                                 (*env)->NewStringUTF(env, baseSmReq.validityPeriod));
 
         jmethodID setRegisteredDelivery = jmethodCache.setRegisteredDelivery;
-        (*env)->CallObjectMethod(env, submitSmObject, setRegisteredDelivery, submitSmReq.registeredDelivery);
+        (*env)->CallObjectMethod(env, baseSmObject, setRegisteredDelivery, baseSmReq.registeredDelivery);
 
         jmethodID setReplaceIfPresent = jmethodCache.setReplaceIfPresent;
-        (*env)->CallObjectMethod(env, submitSmObject, setReplaceIfPresent, submitSmReq.replaceIfPresent);
+        (*env)->CallObjectMethod(env, baseSmObject, setReplaceIfPresent, baseSmReq.replaceIfPresent);
 
 
         jmethodID setDataCoding = jmethodCache.setDataCoding;
-        (*env)->CallObjectMethod(env, submitSmObject, setDataCoding, submitSmReq.dataCoding);
+        (*env)->CallObjectMethod(env, baseSmObject, setDataCoding, baseSmReq.dataCoding);
 
 
         jmethodID setDefaultMsgId = jmethodCache.setDefaultMsgId;
-        (*env)->CallObjectMethod(env, submitSmObject, setDefaultMsgId, submitSmReq.defaultMsgId);
-//        printf("Msg Id - %d\n", submitSmReq.defaultMsgId);
-        if (submitSmReq.smLength > 0) {
-//            printf("Message Exists- %d\n", submitSmReq.smLength);
+        (*env)->CallObjectMethod(env, baseSmObject, setDefaultMsgId, baseSmReq.defaultMsgId);
+//        printf("Msg Id - %d\n", baseSmReq.defaultMsgId);
+        if (baseSmReq.smLength > 0) {
+//            printf("Message Exists- %d\n", baseSmReq.smLength);
             jmethodID setShortMessage = jmethodCache.setShortMessage;
-            jbyteArray shortMsgArray = (*env)->NewByteArray(env, submitSmReq.smLength);
-            (*env)->SetByteArrayRegion(env, shortMsgArray, 0, submitSmReq.smLength, (const jbyte *) submitSmReq.shortMessage);
-            (*env)->CallObjectMethod(env, submitSmObject, setShortMessage, shortMsgArray);
-//            printf("Short Message- %s\n", submitSmReq.shortMessage);
+            jbyteArray shortMsgArray = (*env)->NewByteArray(env, baseSmReq.smLength);
+            (*env)->SetByteArrayRegion(env, shortMsgArray, 0, baseSmReq.smLength, (const jbyte *) baseSmReq.shortMessage);
+            (*env)->CallObjectMethod(env, baseSmObject, setShortMessage, shortMsgArray);
+//            printf("Short Message- %s\n", baseSmReq.shortMessage);
         }
-        return submitSmObject;
+        return baseSmObject;
     }
     return 0;
 }
@@ -412,6 +422,9 @@ void cacheJClass(JNIEnv *env) {
 
     jclass submitSmClassLocal = (*env)->FindClass(env, "Lcom/cloudhopper/smpp/pdu/SubmitSm;");
     jClassCache.submitSmClass = (*env)->NewGlobalRef(env, submitSmClassLocal);
+
+    jclass deliverSmClassLocal = (*env)->FindClass(env, "Lcom/cloudhopper/smpp/pdu/DeliverSm;");
+    jClassCache.deliverSmClass = (*env)->NewGlobalRef(env, deliverSmClassLocal);
 
     jclass addressClassLocal = (*env)->FindClass(env, "Lcom/cloudhopper/smpp/type/Address;");
     jClassCache.addressClass = (*env)->NewGlobalRef(env, addressClassLocal);
@@ -477,20 +490,20 @@ void cacheJField(JNIEnv *env) {
 void freeDecodedContext(DecodedContext *decodedContext) {
     uint32_t commandId = decodedContext->commandId;
     if (commandId == 4) {
-        SubmitSmReq *submitSmReq = (SubmitSmReq *) decodedContext->pduStruct;
-        free(submitSmReq->shortMessage);
-        free(submitSmReq->scheduleDeliveryTime);
-        free(submitSmReq->validityPeriod);
-        free(submitSmReq->serviceType);
+        BaseSmReq *baseSmReq = (BaseSmReq *) decodedContext->pduStruct;
+        free(baseSmReq->shortMessage);
+        free(baseSmReq->scheduleDeliveryTime);
+        free(baseSmReq->validityPeriod);
+        free(baseSmReq->serviceType);
 
-        Address *srcAddress = submitSmReq->sourceAddress;
+        Address *srcAddress = baseSmReq->sourceAddress;
         free(srcAddress->addressValue);
         free(srcAddress);
 
-        Address *destAddress = submitSmReq->destinationAddress;
+        Address *destAddress = baseSmReq->destinationAddress;
         free(destAddress->addressValue);
         free(destAddress);
-        free(submitSmReq->header);
-        free(submitSmReq);
+        free(baseSmReq->header);
+        free(baseSmReq);
     }
 }

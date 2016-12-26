@@ -34,7 +34,7 @@ typedef struct cuda_address_struct {
     char addressValue[21];
 } CudaAddress;
 
-typedef struct cuda_submit_sm_req_struct {
+typedef struct cuda_base_sm_req_struct {
     SmppHeader header;
     char serviceType[6];
     CudaAddress sourceAddress;
@@ -52,12 +52,12 @@ typedef struct cuda_submit_sm_req_struct {
     uint8_t shortMessage[256];
     uint16_t tlvCount;
     CudaTlv tlvList[10];
-} CudaSubmitSmReq;
+} CudaBaseSmReq;
 
 typedef struct cuda_decoded_context_struct {
     char correlationId[MAX_CORRELATION_LENGTH];
     uint32_t commandId;
-    CudaSubmitSmReq pduStruct;
+    CudaBaseSmReq pduStruct;
 } CudaDecodedContext;
 
 typedef struct cuda_dim_struct {

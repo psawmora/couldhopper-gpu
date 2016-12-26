@@ -5,7 +5,7 @@
 #include "cuda_decoder_device.h"
 #include <stdio.h>
 
-__device__ void decodeSubmitSm(CudaSubmitSmReq *submitSmReq,
+__device__ void decodeSubmitSm(CudaBaseSmReq *submitSmReq,
 		ByteBufferContext *context);
 
 __device__ char * strcpy(char *dest, const char *src) {
@@ -39,15 +39,15 @@ __device__ void decodeSinglePdu(CudaPduContext *pduContext,
 //    printf("CommandId - %d\n", smppHeader->commandId);
 //    printf("CommandStatus - %d\n", smppHeader->commandStatus);
 //    printf("SequenceNumber - %d\n", smppHeader->sequenceNumber);
-	if (smppHeader->commandId == 4) {
+	if (smppHeader->commandId == 4 || smppHeader->commandId == 5) {
 		decodeSubmitSm(&(decodedPduStruct->pduStruct), &bufferContext);
-		CudaSubmitSmReq *submitSmReq = &(decodedPduStruct->pduStruct);
-		decodedPduStruct->commandId = 4;
+		CudaBaseSmReq *submitSmReq = &(decodedPduStruct->pduStruct);
+		decodedPduStruct->commandId = smppHeader->commandId;
 		strcpy(decodedPduStruct->correlationId, pduContext->correlationId);
 	}
 }
 
-__device__ void decodeSubmitSm(CudaSubmitSmReq *submitSm,
+__device__ void decodeSubmitSm(CudaBaseSmReq *submitSm,
 		ByteBufferContext *context) {
 	ByteBufferContext bufferContext = *context;
 //    printf("Decoding SubmitSm\n");

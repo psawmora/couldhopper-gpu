@@ -4,6 +4,7 @@
 int useGpu = 0;
 CudaDim blockDimProdction;
 CudaDim gridDimProduction;
+int cpuDecodeThreshold = 4000;
 int nCpuCores = 2;
 
 static CudaPduContext *cudaPduContext; // Pre-allocate Cuda-Context for decoding;
@@ -89,6 +90,8 @@ void init(CodecConfiguration *configuration) {
             gridDimProduction.x = (uint32_t) x;
             gridDimProduction.y = (uint32_t) y;
             gridDimProduction.z = (uint32_t) z;
+
+            config_lookup_int(&propConfig, "production.cpu_decode_threshold", &cpuDecodeThreshold);
         }
     }
 }
@@ -126,7 +129,7 @@ void configureTuner(config_t *propConfig) {
 }
 
 void startPerfTunerPthread(DecoderMetadata decoderMetadata) {
-    log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO, "Starting Performance Tuning For CPU\n");
+    log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO, "\nStarting Performance Tuning For CPU\n");
     log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO, "===================================\n\n");
     int i, j;
     time_t start_t, end_t;
@@ -145,7 +148,8 @@ void startPerfTunerPthread(DecoderMetadata decoderMetadata) {
     diff_t = (((double) tend.tv_sec + 1.0e-9 * tend.tv_nsec) - ((double) tstart.tv_sec + 1.0e-9 * tstart.tv_nsec)) /
              tunerLoopCount;
     log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO, "TimeTaken - %.5f \n", diff_t);
-    log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO, " =====================\n");
+    log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO, "Throughput - %.5f \n", (decoderMetadata.size)/diff_t);
+    log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO, " =====================\n\n");
 }
 
 void startPerfTuner(DecoderMetadata decoderMetadata) {
@@ -154,7 +158,7 @@ void startPerfTuner(DecoderMetadata decoderMetadata) {
     double diff_t;
     struct timespec tstart = {0, 0}, tend = {0, 0};
 
-    log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "Starting Performance Tuning For GPU\n");
+    log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "\nStarting Performance Tuning For GPU\n");
     log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "===================================\n\n");
     for (i = 0; i < performanceMetricCount; i++) {
         CudaDim gridDim = performanceMetric.gridDimList[i];
@@ -179,6 +183,7 @@ void startPerfTuner(DecoderMetadata decoderMetadata) {
         diff_t = (((double) tend.tv_sec + 1.0e-9 * tend.tv_nsec) - ((double) tstart.tv_sec + 1.0e-9 * tstart.tv_nsec)) /
                  tunerLoopCount;
         log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "TimeTaken - %.5f \n", diff_t);
+        log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "Throughput - %.5f \n", (decoderMetadata.size)/diff_t);
         log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, " =====================\n");
     }
     fflush(stdout);
