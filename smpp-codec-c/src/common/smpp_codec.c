@@ -6,6 +6,7 @@ CudaDim blockDimProdction;
 CudaDim gridDimProduction;
 int cpuDecodeThreshold = 4000;
 int nCpuCores = 2;
+int cudaStreamCount = 1;
 
 static CudaPduContext *cudaPduContext; // Pre-allocate Cuda-Context for decoding;
 
@@ -54,6 +55,7 @@ void init(CodecConfiguration *configuration) {
     config_lookup_int(&propConfig, "max_batch_size", &maxBatchSize);
     config_lookup_int(&propConfig, "tuner_loop_count", &tunerLoopCount);
     config_lookup_int(&propConfig, "number_of_cpu_cores", &nCpuCores);
+    config_lookup_int(&propConfig, "cuda_stream_count", &cudaStreamCount);
 
     currentCudaContextSize = (uint32_t) maxBatchSize;
     cudaPduContext = allocatePinnedPduContext(maxBatchSize);
@@ -148,7 +150,9 @@ void startPerfTunerPthread(DecoderMetadata decoderMetadata) {
     diff_t = (((double) tend.tv_sec + 1.0e-9 * tend.tv_nsec) - ((double) tstart.tv_sec + 1.0e-9 * tstart.tv_nsec)) /
              tunerLoopCount;
     log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO, "TimeTaken - %.5f \n", diff_t);
-    log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO, "Throughput - %.5f \n", (decoderMetadata.size)/diff_t);
+    log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO, "Throughput - %.5f \n", (decoderMetadata.size) / diff_t);
+    log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO, "Time for a single packet (Micro-Seconds) - %.5f \n\n",
+                       (diff_t * 1000000) / (decoderMetadata.size));
     log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO, " =====================\n\n");
 }
 
@@ -173,17 +177,25 @@ void startPerfTuner(DecoderMetadata decoderMetadata) {
         time(&start_t);
         clock_gettime(CLOCK_MONOTONIC, &tstart);
 
+/*
         for (j = 0; j < tunerLoopCount; j++) {
             CudaDecodedContext *pStruct = decodeGpu(decoderMetadata);
             free(pStruct);
         }
+*/
+        CudaDecodedContext *decodedPduStructList = malloc(sizeof(CudaDecodedContext) * decoderMetadata.size);
+        CudaMetadata metadata = {decoderMetadata.size, decoderMetadata.pduBuffers, -1, decodedPduStructList, (uint64_t) decoderMetadata.bufferCapacity,
+                                 decoderMetadata.blockDim, decoderMetadata.gridDim};
+        calculateStartPosition(metadata);
 
         time(&end_t);
         clock_gettime(CLOCK_MONOTONIC, &tend);
         diff_t = (((double) tend.tv_sec + 1.0e-9 * tend.tv_nsec) - ((double) tstart.tv_sec + 1.0e-9 * tstart.tv_nsec)) /
                  tunerLoopCount;
         log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "TimeTaken - %.5f \n", diff_t);
-        log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "Throughput - %.5f \n", (decoderMetadata.size)/diff_t);
+        log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "Throughput - %.5f \n", (decoderMetadata.size) / diff_t);
+        log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "Time for a single packet (Micro-Seconds) - %.5f \n\n",
+                           (diff_t * 1000000) / (decoderMetadata.size));
         log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, " =====================\n");
     }
     fflush(stdout);

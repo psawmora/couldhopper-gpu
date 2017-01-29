@@ -1,0 +1,312 @@
+Starting Performance Tuning For GPU
+===================================
+
+Block Size {x,y,z} - {24, 6, 6} | Grid Size {x,y,z} - {20, 10, 10}
+Number of packets being decoded - 100000
+
+TimeTaken - 0.03028
+Throughput - 3302514.27570
+Time for a single packet (Micro-Seconds) - 0.30280
+
+ =====================
+Block Size {x,y,z} - {64, 4, 2} | Grid Size {x,y,z} - {20, 10, 10}
+Number of packets being decoded - 100000
+
+TimeTaken - 0.02817
+Throughput - 3550150.88152
+Time for a single packet (Micro-Seconds) - 0.28168
+
+ =====================
+Block Size {x,y,z} - {24, 24, 1} | Grid Size {x,y,z} - {20, 10, 10}
+Number of packets being decoded - 100000
+
+TimeTaken - 0.02858
+Throughput - 3498887.48665
+Time for a single packet (Micro-Seconds) - 0.28581
+
+ =====================
+Block Size {x,y,z} - {64, 1, 1} | Grid Size {x,y,z} - {200, 10, 20}
+Number of packets being decoded - 100000
+
+TimeTaken - 0.03124
+Throughput - 3201500.74572
+Time for a single packet (Micro-Seconds) - 0.31235
+
+ =====================
+Block Size {x,y,z} - {24, 6, 6} | Grid Size {x,y,z} - {20, 10, 10}
+Number of packets being decoded - 100000
+
+TimeTaken - 0.02843
+Throughput - 3517398.30598
+Time for a single packet (Micro-Seconds) - 0.28430
+
+Starting Performance Tuning For CPU
+===================================
+
+Number of packets being decoded - 100000
+
+TimeTaken - 0.10742
+Throughput - 930933.82799
+Time for a single packet (Micro-Seconds) - 1.07419
+
+
+-------------------------------------------------------------------
+
+
+Starting Performance Tuning For GPU
+===================================
+
+Block Size {x,y,z} - {24, 6, 6} | Grid Size {x,y,z} - {20, 10, 10}
+Number of packets being decoded - 1000
+
+TimeTaken - 0.00056
+Throughput - 1784144.23556
+Time for a single packet (Micro-Seconds) - 0.56049
+
+ =====================
+Block Size {x,y,z} - {64, 4, 2} | Grid Size {x,y,z} - {20, 10, 10}
+Number of packets being decoded - 1000
+
+TimeTaken - 0.00040
+Throughput - 2515640.68072
+Time for a single packet (Micro-Seconds) - 0.39751
+
+ =====================
+Block Size {x,y,z} - {24, 24, 1} | Grid Size {x,y,z} - {20, 10, 10}
+Number of packets being decoded - 1000
+
+TimeTaken - 0.00041
+Throughput - 2429920.48141
+Time for a single packet (Micro-Seconds) - 0.41154
+
+ =====================
+Block Size {x,y,z} - {64, 1, 1} | Grid Size {x,y,z} - {200, 10, 20}
+Number of packets being decoded - 1000
+
+TimeTaken - 0.00184
+Throughput - 544826.48450
+Time for a single packet (Micro-Seconds) - 1.83545
+
+ =====================
+Block Size {x,y,z} - {24, 6, 6} | Grid Size {x,y,z} - {20, 10, 10}
+Number of packets being decoded - 1000
+
+TimeTaken - 0.00048
+Throughput - 2093920.50070
+Time for a single packet (Micro-Seconds) - 0.47757
+
+Number of packets being decoded - 1000
+
+TimeTaken - 0.00060
+Throughput - 1655246.70390
+Time for a single packet (Micro-Seconds) - 0.60414
+------------------------------------------------------------------------------------------
+
+
+Starting Performance Tuning For GPU
+===================================
+
+Block Size {x,y,z} - {24, 6, 6} | Grid Size {x,y,z} - {20, 10, 10}
+Number of packets being decoded - 10000
+
+TimeTaken - 0.00354
+Throughput - 2821653.74811
+Time for a single packet (Micro-Seconds) - 0.35440
+
+ =====================
+Block Size {x,y,z} - {64, 4, 2} | Grid Size {x,y,z} - {20, 10, 10}
+Number of packets being decoded - 10000
+
+TimeTaken - 0.00261
+Throughput - 3834988.05693
+Time for a single packet (Micro-Seconds) - 0.26076
+
+ =====================
+Block Size {x,y,z} - {24, 24, 1} | Grid Size {x,y,z} - {20, 10, 10}
+Number of packets being decoded - 10000
+
+TimeTaken - 0.00264
+Throughput - 3783260.84638
+Time for a single packet (Micro-Seconds) - 0.26432
+
+ =====================
+Block Size {x,y,z} - {64, 1, 1} | Grid Size {x,y,z} - {200, 10, 20}
+Number of packets being decoded - 10000
+
+TimeTaken - 0.00420
+Throughput - 2378712.28531
+Time for a single packet (Micro-Seconds) - 0.42040
+
+ =====================
+Block Size {x,y,z} - {24, 6, 6} | Grid Size {x,y,z} - {20, 10, 10}
+Number of packets being decoded - 10000
+
+TimeTaken - 0.00265
+Throughput - 3775560.59348
+Time for a single packet (Micro-Seconds) - 0.26486
+
+
+Starting Performance Tuning For CPU
+===================================
+
+Number of packets being decoded - 10000
+
+TimeTaken - 0.00485
+Throughput - 2060985.44525
+Time for a single packet (Micro-Seconds) - 0.48520
+
+-------------------------------------------------------------------------
+
+Starting Performance Tuning For CPU
+===================================
+
+Number of packets being decoded - 1000000
+
+TimeTaken - 0.96943
+Throughput - 1031536.46603
+Time for a single packet (Micro-Seconds) - 0.96943
+
+ =====================
+
+
+Starting Performance Tuning For CPU
+===================================
+
+Number of packets being decoded - 1000000
+
+TimeTaken - 1.06844
+Throughput - 935947.74596
+Time for a single packet (Micro-Seconds) - 1.06844
+
+ =====================
+
+
+Starting Performance Tuning For GPU
+===================================
+
+Block Size {x,y,z} - {24, 6, 6} | Grid Size {x,y,z} - {20, 10, 10}
+Number of packets being decoded - 1000000
+
+TimeTaken - 0.29433
+Throughput - 3397497.23912
+Time for a single packet (Micro-Seconds) - 0.29433
+
+ =====================
+Block Size {x,y,z} - {64, 4, 2} | Grid Size {x,y,z} - {20, 10, 10}
+Number of packets being decoded - 1000000
+
+TimeTaken - 0.28696
+Throughput - 3484863.53261
+Time for a single packet (Micro-Seconds) - 0.28696
+
+ =====================
+Block Size {x,y,z} - {24, 24, 1} | Grid Size {x,y,z} - {20, 10, 10}
+Number of packets being decoded - 1000000
+
+TimeTaken - 0.28561
+Throughput - 3501253.56763
+Time for a single packet (Micro-Seconds) - 0.28561
+
+ =====================
+Block Size {x,y,z} - {64, 1, 1} | Grid Size {x,y,z} - {200, 10, 20}
+Number of packets being decoded - 1000000
+
+TimeTaken - 0.33972
+Throughput - 2943594.83763
+Time for a single packet (Micro-Seconds) - 0.33972
+
+ =====================
+Block Size {x,y,z} - {24, 6, 6} | Grid Size {x,y,z} - {20, 10, 10}
+Number of packets being decoded - 1000000
+
+TimeTaken - 0.28493
+Throughput - 3509638.60615
+Time for a single packet (Micro-Seconds) - 0.28493
+
+ =====================
+
+Starting Performance Tuning For GPU
+===================================
+
+Block Size {x,y,z} - {24, 6, 6} | Grid Size {x,y,z} - {20, 10, 10}
+Number of packets being decoded - 1000000
+
+TimeTaken - 0.58907
+Throughput - 1697601.17119
+Time for a single packet (Micro-Seconds) - 0.58907
+
+ =====================
+Block Size {x,y,z} - {64, 4, 2} | Grid Size {x,y,z} - {20, 10, 10}
+Number of packets being decoded - 1000000
+
+TimeTaken - 0.55395
+Throughput - 1805218.07113
+Time for a single packet (Micro-Seconds) - 0.55395
+
+ =====================
+Block Size {x,y,z} - {24, 24, 1} | Grid Size {x,y,z} - {20, 10, 10}
+Number of packets being decoded - 1000000
+
+TimeTaken - 0.59862
+Throughput - 1670520.36183
+Time for a single packet (Micro-Seconds) - 0.59862
+
+ =====================
+Block Size {x,y,z} - {64, 1, 1} | Grid Size {x,y,z} - {200, 10, 20}
+Number of packets being decoded - 1000000
+
+TimeTaken - 0.65122
+Throughput - 1535587.42425
+Time for a single packet (Micro-Seconds) - 0.65122
+
+ =====================
+Block Size {x,y,z} - {24, 6, 6} | Grid Size {x,y,z} - {20, 10, 10}
+Number of packets being decoded - 1000000
+
+TimeTaken - 0.62936
+Throughput - 1588917.46049
+Time for a single packet (Micro-Seconds) - 0.62936
+
+ =====================
+
+
+
+
+
+
+
+// Codec-Mode configuration
+name = "Codec-Mode-Configurations";
+
+isTunerMode = true;
+isUseGpu = true;
+number_of_cpu_cores = 4;
+// Use to average the time taken
+tuner_loop_count = 20;
+max_packet_size = 200;
+max_batch_size = 1000000;
+cuda_stream_count = 4
+
+production =
+{
+ cpu_decode_threshold = 4000;
+ block = {x = 32; y = 1 ; z = 1;};
+ grid = {x = 1; y = 1; z = 1;};
+};
+
+tuner =
+{
+  block = ( { x = 10; y = 10; z = 10;},
+            { x = 64; y = 4; z = 2;},
+            { x = 24; y = 24; z = 1;},
+            { x = 64; y = 1; z = 1;},
+            { x = 24; y = 6; z = 6;}
+          );
+  grid = (  { x = 2; y = 2; z = 2;},
+            { x = 20; y = 10; z = 10;},
+            { x = 20; y = 10; z = 10;},
+            { x = 200; y = 10; z = 20;},
+            { x = 20; y = 10; z = 10;}
+          );
+
+};

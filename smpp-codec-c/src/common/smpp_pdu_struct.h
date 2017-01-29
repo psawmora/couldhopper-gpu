@@ -128,7 +128,7 @@ typedef struct thread_param {
     int startIndex;
     int length;
     DirectPduContext *pduContexts;
-    DecodedContext *decodedPduStructList;;
+    DecodedContext *decodedPduStructList;
 } ThreadParam;
 
 void *decode(void *threadParam);

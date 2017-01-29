@@ -78,6 +78,8 @@ typedef struct cuda_metadata {
 
 void decodeCuda(CudaMetadata cudaMetadata);
 
+void calculateStartPosition(CudaMetadata cudaMetadata);
+
 void initCudaParameters(uint32_t pduContextSize, uint64_t pduBufferLength);
 
 CudaPduContext *allocatePinnedPduContext(int length);

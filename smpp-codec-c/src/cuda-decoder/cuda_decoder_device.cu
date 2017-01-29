@@ -4,6 +4,7 @@
 
 #include "cuda_decoder_device.h"
 #include <stdio.h>
+#include <host_defines.h>
 
 __device__ void decodeSubmitSm(CudaBaseSmReq *submitSmReq,
 		ByteBufferContext *context);
@@ -25,8 +26,8 @@ __device__ void decodeSinglePdu(CudaPduContext *pduContext,
 //    printf("Correlation Id - %s\n", correlationId);
 	ByteBufferContext bufferContext;
 	bufferContext.buffer = pduBuffer;
-	bufferContext.readIndex = startIndex;
-	bufferContext.limit = length;
+	bufferContext.readIndex = (uint64_t) startIndex;
+	bufferContext.limit = (uint64_t) length;
 //    printf("LIMIT %ld | Length %ld\n",bufferContext.limit,length);
 	SmppHeader *smppHeader = &((decodedPduStruct->pduStruct).header);
 

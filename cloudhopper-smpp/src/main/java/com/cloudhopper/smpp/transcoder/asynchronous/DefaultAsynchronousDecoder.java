@@ -52,6 +52,8 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
 
     private AtomicInteger currentBatchSize;
 
+    private AtomicInteger index;
+
     private ChannelBuffer pdu;
 
     private volatile boolean isTuningMode = false;
@@ -83,6 +85,7 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
         this.currentBatchSize = new AtomicInteger(0);
         this.batchSize = batchSize;
         this.pduContainerBufferActive = ByteBuffer.allocateDirect(MAX_PDU_LENGTH * batchSize);
+        this.index = new AtomicInteger(0);
         try {
             Properties properties = new Properties();
             properties.load(this.getClass().getResourceAsStream("/system.properties"));
@@ -131,6 +134,7 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
                     return;
                 }
                 if (currentBatchSize.compareAndSet(batchSize, 0)) {
+                    index.set(0);
                     if (isTuningMode) {
                         isAccept = false;
                         logger.debug("Starting performance tuning and sending batch");
@@ -143,12 +147,22 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
                         System.out.println("Sending the batch to the decoder");
                         List<DecodedPduContext> decodedPduContexts = decodePDUDirect(pduContainerBufferActive, batchSize, 15);
                         System.out.println("Got Response " + decodedPduContexts.size());
+                        System.out.println("First byte - " + pduContainerBufferActive.get(0));
                         pduContainerBufferActive.position(0);
                         notifyListeners(decodedPduContexts);
                     }
                 } else {
                     pdu = asynchronousContext.getChannelBuffer().copy();
                     String channelId = asynchronousContext.getChannelId();
+                    pduContainerBufferActive.put((byte) 127);
+                    pduContainerBufferActive.put((byte) 127);
+                    pduContainerBufferActive.put((byte) 127);
+                    pduContainerBufferActive.put((byte) 127);
+                    pduContainerBufferActive.put((byte) 127);
+                    pduContainerBufferActive.put((byte) 127);
+                    pduContainerBufferActive.put((byte) 127);
+                    pduContainerBufferActive.put((byte) 127);
+                    pduContainerBufferActive.putInt(index.getAndIncrement());
                     pduContainerBufferActive.put(channelId.getBytes());
                     pduContainerBufferActive.put(pdu.toByteBuffer(pdu.readerIndex(), pdu.readableBytes()));
                     currentBatchSize.incrementAndGet();

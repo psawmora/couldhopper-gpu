@@ -4,6 +4,7 @@
 #include <cuda_profiler_api.h>
 
 #include "cuda_decoder_device.h"
+#include "smpp_codec.h"
 
 //nvprof --analysis-metrics -o  smpp-server-analysis.nvprof%p --profile-child-processes bin/smpp-server console
 
@@ -31,7 +32,149 @@ if (abort)
 exit(code);
 }
 }
+
 __shared__ CudaPduContext directPduContext[1024];
+__shared__ uint32_t nPduCount;
+__shared__ int minPduIndex;
+
+
+__global__ void launchDecodeLocal(int nPduContext, int startIndex, CudaPduContext *originalPduContexts,
+                                  CudaDecodedContext *originalDecodedPduStructList, uint8_t *pduBuffer) {
+    int threadIndex = ((threadIdx.x + threadIdx.y * blockDim.x) + (blockDim.x * blockDim.y) * threadIdx.z) +
+                      (blockDim.x * blockDim.y * blockDim.z) *
+                      ((gridDim.x * blockIdx.y) + (blockIdx.x) + (gridDim.x * gridDim.y) * blockIdx.z);
+
+    CudaPduContext *pduContexts = originalPduContexts + startIndex;
+    CudaDecodedContext *decodedPduStructList = originalDecodedPduStructList + startIndex;
+    int initBatchSize = nPduContext / ((blockDim.x * blockDim.y * blockDim.z) * (gridDim.x * gridDim.y * gridDim.z));
+    int remainder = nPduContext % ((blockDim.x * blockDim.y * blockDim.z) * (gridDim.x * gridDim.y * gridDim.z));
+
+    int additionalElements = threadIndex < remainder ? 1 : 0;
+    int batchSize = initBatchSize + additionalElements;
+    if (batchSize > 0) {
+//        printf("BatchSize - %d - ThreadIndex - %d\n", batchSize, threadIndex);
+        int i;
+        for (i = 0; i < batchSize; i++) {
+            int index = threadIndex + i * ((blockDim.x * blockDim.y * blockDim.z) * (gridDim.x * gridDim.y * gridDim.z));
+            directPduContext[(threadIdx.x + threadIdx.y * blockDim.x + (blockDim.x * blockDim.y) * threadIdx.z) + i]
+                    = pduContexts[index];
+/*
+            printf("StartIndex - %d - count - %d - Pdu Length - %d - Index - %d\n",
+                   startIndex, nPduContext, pduContexts[index].length, index);
+*/
+        }
+        __syncthreads();
+//        printf("Block Size - %d - ThreadIndex - %d\n", batchSize, threadIndex);
+        for (i = 0; i < batchSize; i++) {
+            int index = threadIndex + i * ((blockDim.x * blockDim.y * blockDim.z) * (gridDim.x * gridDim.y * gridDim.z));
+            CudaPduContext *cudaPduContext = &directPduContext[
+                    (threadIdx.x + threadIdx.y * blockDim.x + (blockDim.x * blockDim.y) * threadIdx.z) + i];
+//            printf("Index - %d - ThreadIndex - %d\n", index, threadIndex);
+//            printf("Pdu Length - %d - Index -%d\n", cudaPduContext->length, index);
+            CudaDecodedContext *decodedPduStruct = &decodedPduStructList[index];
+            decodeSinglePdu(cudaPduContext, decodedPduStruct, pduBuffer);
+//            printf("Done Decoding Device - %s\n", decodedPduStruct->pduStruct.sourceAddress.addressValue);
+        }
+    }
+}
+
+__global__ void findPacketBoundry(uint8_t *pduBuffer,
+                                  uint32_t bufferLength,
+                                  CudaDecodedContext *decodedPduStructList,
+                                  CudaPduContext *globalDirectPduContext,
+                                  int correlationIdLength) {
+    uint8_t pattern[8] = {127, 127, 127, 127, 127, 127, 127, 127};
+    int threadIndex = ((threadIdx.x + threadIdx.y * blockDim.x) + (blockDim.x * blockDim.y) * threadIdx.z) +
+                      (blockDim.x * blockDim.y * blockDim.z) *
+                      ((gridDim.x * blockIdx.y) + (blockIdx.x) + (gridDim.x * gridDim.y) * blockIdx.z);
+
+    uint32_t totalThreadCount = (blockDim.x * blockDim.y * blockDim.z) * (gridDim.x * gridDim.y * gridDim.z);
+    int init20BytesBatchSize = bufferLength / 20;
+    int remainder20Bytes = bufferLength % 20;
+
+    int initBatchSize = init20BytesBatchSize / totalThreadCount;
+    int remainder = init20BytesBatchSize % totalThreadCount;
+    int additionalElements = threadIndex < remainder ? 1 : 0;
+    int batchSize = (initBatchSize + additionalElements) * 20 + (threadIndex == 0) * remainder20Bytes;
+/*
+    printf("Batch Size - %d | buffer size - %d | remainder20 - %d | remainder - %d \n",
+           batchSize, bufferLength, remainder20Bytes, remainder);
+*/
+
+    int threadBlockIndex = threadIdx.x + threadIdx.y * blockDim.x + (blockDim.x * blockDim.y) * threadIdx.z;
+    if (threadBlockIndex == 0) {
+        nPduCount = 0;
+        minPduIndex = 100000000;
+    }
+    __syncthreads();
+
+    if (batchSize > 0) {
+        int startIndex = threadIndex;
+        if (threadIndex < remainder && threadIndex > 0) {
+            startIndex = threadIndex * (initBatchSize + additionalElements) * 20 + remainder20Bytes;
+        }
+        if (threadIndex >= remainder && threadIndex > 0) {
+            startIndex = ((remainder) * (initBatchSize + 1) * 20 + remainder20Bytes) +
+                         (threadIndex - remainder) * initBatchSize * 20;
+        }
+
+//        printf("Start - %d - ThreadIndex - %d\n", startIndex, threadIndex);
+        int stop = 0;
+        int count = 0;
+        int patternPosition = 0;
+        int numberOfPdu = 0;
+
+        while (!stop) {
+            uint8_t valueAtIndex = *(pduBuffer + startIndex + count);
+            if (valueAtIndex == pattern[patternPosition]) {
+                patternPosition++;
+            } else {
+                patternPosition = 0;
+            }
+            if (patternPosition == 8) {
+                ++numberOfPdu;
+                patternPosition = 0;
+
+                uint64_t breakPoint = (uint64_t) (startIndex + count + 1);
+                int index = readUint32WithoutContext(pduBuffer, (uint64_t) breakPoint);
+                CudaPduContext *pduContext = &globalDirectPduContext[index];
+                breakPoint += 4;
+
+                uint64_t nextReadIndex =
+                        readStringByLength(
+                                (uint64_t) (breakPoint), pduBuffer, correlationIdLength, pduContext->correlationId);
+                breakPoint = nextReadIndex;
+
+                uint32_t pduLength = readUint32WithoutContext(pduBuffer, (uint64_t) breakPoint);
+                pduContext->start = (uint32_t) breakPoint;
+                pduContext->length = pduLength;
+                atomicMin(&minPduIndex, index);
+//                printf("Pdu Length - %d - NextReadIndex - %ld - Index -%d\n", pduLength, nextReadIndex, index);
+                /**
+                 * 1. Create CudaPduContext with start and length values.
+                 * 2. Store it in block shared memory.
+                 * 3. After the block is done processing, store them in the global memory.
+                 * 4. Call the child kernel to do the actual decoding.
+                 */
+            }
+            count++;
+            if ((patternPosition == 0 && count >= batchSize) || (startIndex + count) >= bufferLength) {
+                stop = 1;
+            }
+        }
+        atomicAdd(&nPduCount, numberOfPdu);
+    }
+
+    __syncthreads();
+//    printf("Min index - %d Pdu Count - %d\n", minPduIndex, nPduCount);
+    if (threadBlockIndex == 0) {
+//        printf("Min index - %d Pdu Count - %d\n", minPduIndex, nPduCount);
+        if (nPduCount > 0) {
+            launchDecodeLocal << < 10, 10 >> > (nPduCount, minPduIndex, globalDirectPduContext, decodedPduStructList, pduBuffer);
+        }
+        cudaDeviceSynchronize();
+    }
+}
 
 __global__ void launchDecode(int nPduContext, CudaPduContext *pduContexts,
                              CudaDecodedContext *decodedPduStructList, uint8_t *pduBuffer) {
@@ -54,8 +197,8 @@ __global__ void launchDecode(int nPduContext, CudaPduContext *pduContexts,
         for (i = 0; i < batchSize; i++) {
             int index = threadIndex + i * ((blockDim.x * blockDim.y * blockDim.z) * (gridDim.x * gridDim.y * gridDim.z));
 //            printf("ThreadIndex - 1 - %d | Index - %d\n", threadIndex, index);
-            directPduContext[(threadIdx.x + threadIdx.y * blockDim.x + (blockDim.x * blockDim.y) * threadIdx.z) +
-                             (i)] = pduContexts[index];
+            directPduContext[(threadIdx.x + threadIdx.y * blockDim.x + (blockDim.x * blockDim.y) * threadIdx.z) + i]
+                    = pduContexts[index];
         }
         __syncthreads();
 
@@ -95,6 +238,45 @@ void freePinndedDecodedContext(int length, CudaDecodedContext *decodedPduStructL
     cudaFreeHost(decodedPduStructList);
 }
 
+
+/**
+ * findPacketBoundry(uint8_t *pduBuffer,
+                                   uint32_t bufferLength,
+                                   CudaDecodedContext *decodedPduStructList,
+                                   CudaPduContext *globalDirectPduContext,
+                                   int correlationIdLength)
+ * @param cudaMetadata
+ */
+
+void calculateStartPosition(CudaMetadata cudaMetadata) {
+    CudaDim block = cudaMetadata.blockDim;
+    CudaDim grid = cudaMetadata.gridDim;
+    dim3 gridDim(grid.x, grid.y, grid.z);
+    dim3 blockDim(block.x, block.y, block.z);
+
+    uint8_t *pduBuffer = cudaMetadata.pduBuffer;
+    cudaMemcpy(pduBuffer_d, pduBuffer, sizeof(uint8_t) * cudaMetadata.pduBufferLength, cudaMemcpyHostToDevice);
+
+    gpuErrchk(cudaPeekAtLastError());
+//    printf("Calculating Start Position - %d | First byte -C  %d\n", (int) cudaMetadata.pduBufferLength, pduBuffer[0]);
+    findPacketBoundry << < gridDim, blockDim >> > (
+            pduBuffer_d,
+                    cudaMetadata.pduBufferLength,
+                    decodedPduStructList_d,
+                    pduContexts_d,
+                    15);
+    gpuErrchk(cudaPeekAtLastError());
+    gpuErrchk(cudaDeviceSynchronize());
+    CudaDecodedContext *decodedPduStructList = cudaMetadata.decodedPduStructList;
+    gpuErrchk(
+            cudaMemcpy(decodedPduStructList, decodedPduStructList_d, sizeof(CudaDecodedContext) * cudaMetadata.length,
+                       cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaGetLastError());
+    gpuErrchk(cudaDeviceSynchronize());
+    printf("Done Decoding - %d - Count - %d\n", decodedPduStructList[cudaMetadata.length - 1].commandId, cudaMetadata.length);
+    fflush(stdout);
+}
+
 void decodeCuda(CudaMetadata cudaMetadata) {
 
     CudaPduContext *pduContexts = cudaMetadata.cudaPduContexts;
@@ -104,24 +286,75 @@ void decodeCuda(CudaMetadata cudaMetadata) {
     int pduContextSize = nPduContext * sizeof(CudaPduContext);
     int decodedContextSize = nPduContext * sizeof(CudaDecodedContext);
 
+    // Copies the PduBuffer
+    // Devide the PduContexts and decodePduContexts by the number streams.
+    // Parallely offload those to the GPU.
+    // Do process them parallely and wait for the response.
+
     cudaMemcpy(pduBuffer_d, pduBuffer, sizeof(uint8_t) * cudaMetadata.pduBufferLength, cudaMemcpyHostToDevice);
-    cudaMemcpy(pduContexts_d, pduContexts, sizeof(CudaPduContext) * nPduContext, cudaMemcpyHostToDevice);
+
+    cudaStream_t streams[cudaStreamCount];
+    cudaError_t results[cudaStreamCount];
+
+    int streamCount = 0;
+    int batchSize = nPduContext > cudaStreamCount ? nPduContext / cudaStreamCount : nPduContext;
+    int index = 0;
+    while (index < nPduContext) {
+        results[streamCount] = cudaStreamCreate(&(streams[streamCount]));
+        int startIndex = index;
+        int length = (nPduContext - index) <= batchSize ? (nPduContext - index) : batchSize;
+        index += length;
+        results[streamCount] =
+                cudaMemcpyAsync(
+                        pduContexts_d + startIndex, pduContexts + startIndex, sizeof(CudaPduContext) * length,
+                        cudaMemcpyHostToDevice,
+                        streams[streamCount]);
+        streamCount++;
+
+    }
+
 
     CudaDim block = cudaMetadata.blockDim;
-//    printf("Cuda Block Dim | x - %d\n", block.x);
     CudaDim grid = cudaMetadata.gridDim;
-    dim3 gridDim(grid.x, grid.y, grid.z);
+    int gridx = grid.x < streamCount ? 1 : grid.x / streamCount;
+    int gridy = grid.y < streamCount ? 1 : grid.y / streamCount;
+    int gridz = grid.z < streamCount ? 1 : grid.z / streamCount;
+    dim3 gridDim(gridx, gridy, gridz);
     dim3 blockDim(block.x, block.y, block.z);
+    index = 0;
+    int i = 0;
+    while (index < nPduContext) {
+        printf("Cuda Stream Number - %d\n", i);
+        int startIndex = index;
+        int length = (nPduContext - index) <= batchSize ? (nPduContext - index) : batchSize;
+        index += length;
+        gpuErrchk(cudaPeekAtLastError());
+        launchDecode << < gridDim, blockDim, 0, streams[i] >> >
+                                                (length, pduContexts_d + startIndex, decodedPduStructList_d + startIndex,
+                                                        pduBuffer_d);
+        gpuErrchk(cudaPeekAtLastError());
+        i++;
+    }
 
-    gpuErrchk(cudaPeekAtLastError());
-    launchDecode << < gridDim, blockDim >> > (nPduContext, pduContexts_d, decodedPduStructList_d, pduBuffer_d);
-    gpuErrchk(cudaPeekAtLastError());
+    index = 0;
+    i = 0;
+    while (index < nPduContext) {
+        int startIndex = index;
+        int length = (nPduContext - index) <= batchSize ? (nPduContext - index) : batchSize;
+        index += length;
+        gpuErrchk(
+                cudaMemcpyAsync(decodedPduStructList + startIndex, decodedPduStructList_d + startIndex,
+                                sizeof(CudaDecodedContext) * length,
+                                cudaMemcpyDeviceToHost, streams[i]));
+        gpuErrchk(cudaGetLastError());
+        i++;
+    }
+
+
     cudaDeviceSynchronize();
-    gpuErrchk(
-            cudaMemcpy(decodedPduStructList, decodedPduStructList_d, sizeof(CudaDecodedContext) * nPduContext,
-                       cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaGetLastError());
-    cudaDeviceSynchronize();
+    for (i = 0; i < streamCount; i++) {
+        results[i] = cudaStreamDestroy(streams[i]);
+    }
 //    cudaFree(decodedPduStructList_d);
 //    cudaFree(pduContexts_d);
 //    cudaFree(pduBuffer_d);
