@@ -16,6 +16,7 @@ extern CudaDim gridDimProduction;
 extern int nCpuCores;
 extern int cpuDecodeThreshold;
 extern int cudaStreamCount;
+extern float cudaEventRunningTime;
 
 
 typedef struct decoder_metadata_struct {

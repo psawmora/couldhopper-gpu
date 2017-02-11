@@ -8,6 +8,7 @@ CudaDim gridDimProduction;
 int cpuDecodeThreshold = 4000;
 int nCpuCores = 2;
 int cudaStreamCount = 1;
+float cudaEventRunningTime = 0;
 
 static CudaPduContext *cudaPduContext; // Pre-allocate Cuda-Context for decoding;
 
@@ -183,13 +184,15 @@ void startPerfTuner(DecoderMetadata decoderMetadata) {
                            "Is Using Dynamic Parallelism - %d\n\n", useDynamicParallelism);
         time(&start_t);
         clock_gettime(CLOCK_MONOTONIC, &tstart);
-
+        float gpuEventTime = 0;
         for (j = 0; j < tunerLoopCount; j++) {
             if (useDynamicParallelism) {
                 CudaDecodedContext *pStruct = decodeGpuDynamic(decoderMetadata);
+                gpuEventTime += cudaEventRunningTime;
                 free(pStruct);
             } else {
                 CudaDecodedContext *pStruct = decodeGpu(decoderMetadata);
+                gpuEventTime += cudaEventRunningTime;
                 free(pStruct);
             }
         }
@@ -202,9 +205,10 @@ void startPerfTuner(DecoderMetadata decoderMetadata) {
         log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "Throughput - %.5f \n", (decoderMetadata.size) / diff_t);
         log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "Time for a single packet (Micro-Seconds) - %.5f \n\n",
                            (diff_t * 1000000) / (decoderMetadata.size));
+        log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "GPU Event Time - %.5f \n", gpuEventTime);
         log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, " =====================\n");
     }
-    fflush(stdout);
+    freePinndedMemory();
 }
 
 CudaDecodedContext *decodeGpuDynamic(DecoderMetadata decoderMetadata) {
@@ -217,7 +221,6 @@ CudaDecodedContext *decodeGpuDynamic(DecoderMetadata decoderMetadata) {
 }
 
 CudaDecodedContext *decodeGpu(DecoderMetadata decoderMetadata) {
-//    printf("Decode GPU\n");
     uint8_t *pduBuffers = decoderMetadata.pduBuffers;
     uint32_t size = decoderMetadata.size;
     uint64_t bufferCapacity = decoderMetadata.bufferCapacity;

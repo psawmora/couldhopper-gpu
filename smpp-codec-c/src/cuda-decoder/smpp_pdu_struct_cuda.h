@@ -74,6 +74,7 @@ typedef struct cuda_metadata {
     uint64_t pduBufferLength;
     CudaDim blockDim;
     CudaDim gridDim;
+    uint8_t isTunerMode;
 } CudaMetadata;
 
 void decodeCuda(CudaMetadata cudaMetadata);
@@ -85,6 +86,7 @@ void initCudaParameters(uint32_t pduContextSize, uint64_t pduBufferLength);
 CudaPduContext *allocatePinnedPduContext(int length);
 
 void freePinndedPduContext(int length, CudaPduContext *pduContexts);
+void freePinndedMemory();
 
 void cudaTest();
 
