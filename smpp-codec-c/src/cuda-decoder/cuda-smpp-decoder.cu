@@ -52,28 +52,32 @@ __global__ void launchDecodeLocal(int nPduContext, int startIndex, CudaPduContex
     int additionalElements = threadIndex < remainder ? 1 : 0;
     int batchSize = initBatchSize + additionalElements;
     if (batchSize > 0) {
-//        printf("BatchSize - %d - ThreadIndex - %d\n", batchSize, threadIndex);
-        int i;
-        for (i = 0; i < batchSize; i++) {
-            int index = threadIndex + i * ((blockDim.x * blockDim.y * blockDim.z) * (gridDim.x * gridDim.y * gridDim.z));
-            directPduContext[(threadIdx.x + threadIdx.y * blockDim.x + (blockDim.x * blockDim.y) * threadIdx.z) + i]
-                    = pduContexts[index];
 /*
-            printf("StartIndex - %d - count - %d - Pdu Length - %d - Index - %d\n",
-                   startIndex, nPduContext, pduContexts[index].length, index);
-*/
+        if ((threadIdx.x + threadIdx.y * blockDim.x + (blockDim.x * blockDim.y) * threadIdx.z) == 0) {
+            printf("pdu count 1 - 0 - %d\n", nPduContext);
         }
-        __syncthreads();
-//        printf("Block Size - %d - ThreadIndex - %d\n", batchSize, threadIndex);
+*/
+//        printf("batch size - %d\n", batchSize);
+        int i;
+/*
         for (i = 0; i < batchSize; i++) {
             int index = threadIndex + i * ((blockDim.x * blockDim.y * blockDim.z) * (gridDim.x * gridDim.y * gridDim.z));
+            int localIndex = (threadIdx.x + threadIdx.y * blockDim.x + (blockDim.x * blockDim.y) * threadIdx.z) + i;
+            CudaPduContext aStruct1 = pduContexts[index];
+            CudaPduContext aStruct2 = directPduContext[localIndex];
+            aStruct2 = aStruct1;
+        }
+*/
+//        __syncthreads();
+        for (i = 0; i < batchSize; i++) {
+            int index = threadIndex + i * ((blockDim.x * blockDim.y * blockDim.z) * (gridDim.x * gridDim.y * gridDim.z));
+/*
             CudaPduContext *cudaPduContext = &directPduContext[
                     (threadIdx.x + threadIdx.y * blockDim.x + (blockDim.x * blockDim.y) * threadIdx.z) + i];
-//            printf("Index - %d - ThreadIndex - %d\n", index, threadIndex);
-//            printf("Pdu Length - %d - Index -%d\n", cudaPduContext->length, index);
+*/
+            CudaPduContext *cudaPduContext = &pduContexts[index];
             CudaDecodedContext *decodedPduStruct = &decodedPduStructList[index];
             decodeSinglePdu(cudaPduContext, decodedPduStruct, pduBuffer);
-//            printf("Done Decoding Device - %s\n", decodedPduStruct->pduStruct.sourceAddress.addressValue);
         }
     }
 }
@@ -96,11 +100,6 @@ __global__ void findPacketBoundry(uint8_t *pduBuffer,
     int remainder = init20BytesBatchSize % totalThreadCount;
     int additionalElements = threadIndex < remainder ? 1 : 0;
     int batchSize = (initBatchSize + additionalElements) * 20 + (threadIndex == 0) * remainder20Bytes;
-/*
-    printf("Batch Size - %d | buffer size - %d | remainder20 - %d | remainder - %d \n",
-           batchSize, bufferLength, remainder20Bytes, remainder);
-*/
-
     int threadBlockIndex = threadIdx.x + threadIdx.y * blockDim.x + (blockDim.x * blockDim.y) * threadIdx.z;
     if (threadBlockIndex == 0) {
         nPduCount = 0;
@@ -117,8 +116,6 @@ __global__ void findPacketBoundry(uint8_t *pduBuffer,
             startIndex = ((remainder) * (initBatchSize + 1) * 20 + remainder20Bytes) +
                          (threadIndex - remainder) * initBatchSize * 20;
         }
-
-//        printf("Start - %d - ThreadIndex - %d\n", startIndex, threadIndex);
         int stop = 0;
         int count = 0;
         int patternPosition = 0;
@@ -148,8 +145,8 @@ __global__ void findPacketBoundry(uint8_t *pduBuffer,
                 uint32_t pduLength = readUint32WithoutContext(pduBuffer, (uint64_t) breakPoint);
                 pduContext->start = (uint32_t) breakPoint;
                 pduContext->length = pduLength;
+                breakPoint += pduLength - 1;
                 atomicMin(&minPduIndex, index);
-//                printf("Pdu Length - %d - NextReadIndex - %ld - Index -%d\n", pduLength, nextReadIndex, index);
                 /**
                  * 1. Create CudaPduContext with start and length values.
                  * 2. Store it in block shared memory.
@@ -162,15 +159,21 @@ __global__ void findPacketBoundry(uint8_t *pduBuffer,
                 stop = 1;
             }
         }
+//        printf("Pdu Count - %d\n", numberOfPdu);
         atomicAdd(&nPduCount, numberOfPdu);
     }
 
     __syncthreads();
-//    printf("Min index - %d Pdu Count - %d\n", minPduIndex, nPduCount);
     if (threadBlockIndex == 0) {
-//        printf("Min index - %d Pdu Count - %d\n", minPduIndex, nPduCount);
         if (nPduCount > 0) {
-            launchDecodeLocal << < 10, 10 >> > (nPduCount, minPduIndex, globalDirectPduContext, decodedPduStructList, pduBuffer);
+            int blockSize = nPduCount >= 256 ? 256 / 3 : nPduCount / 3;
+            int gridSize = (nPduCount / blockSize) >= 1 ? (nPduCount / blockSize) : 1;
+//            printf("Pdu Count - 0 - %d - min - %d\n", nPduCount, minPduIndex);
+
+            dim3 gridDim(gridSize, gridSize, gridSize);
+            dim3 blockDim(blockSize, blockSize, blockSize);
+            launchDecodeLocal << < gridDim, blockDim >> >
+                                            (nPduCount, minPduIndex, globalDirectPduContext, decodedPduStructList, pduBuffer);
         }
         cudaDeviceSynchronize();
     }
@@ -248,7 +251,7 @@ void freePinndedDecodedContext(int length, CudaDecodedContext *decodedPduStructL
  * @param cudaMetadata
  */
 
-void calculateStartPosition(CudaMetadata cudaMetadata) {
+void decodeCudaDynamic(CudaMetadata cudaMetadata) {
     CudaDim block = cudaMetadata.blockDim;
     CudaDim grid = cudaMetadata.gridDim;
     dim3 gridDim(grid.x, grid.y, grid.z);
@@ -258,7 +261,6 @@ void calculateStartPosition(CudaMetadata cudaMetadata) {
     cudaMemcpy(pduBuffer_d, pduBuffer, sizeof(uint8_t) * cudaMetadata.pduBufferLength, cudaMemcpyHostToDevice);
 
     gpuErrchk(cudaPeekAtLastError());
-//    printf("Calculating Start Position - %d | First byte -C  %d\n", (int) cudaMetadata.pduBufferLength, pduBuffer[0]);
     findPacketBoundry << < gridDim, blockDim >> > (
             pduBuffer_d,
                     cudaMetadata.pduBufferLength,
@@ -273,7 +275,6 @@ void calculateStartPosition(CudaMetadata cudaMetadata) {
                        cudaMemcpyDeviceToHost));
     gpuErrchk(cudaGetLastError());
     gpuErrchk(cudaDeviceSynchronize());
-    printf("Done Decoding - %d - Count - %d\n", decodedPduStructList[cudaMetadata.length - 1].commandId, cudaMetadata.length);
     fflush(stdout);
 }
 
@@ -324,7 +325,7 @@ void decodeCuda(CudaMetadata cudaMetadata) {
     index = 0;
     int i = 0;
     while (index < nPduContext) {
-        printf("Cuda Stream Number - %d\n", i);
+//        printf("Cuda Stream Number - %d\n", i);
         int startIndex = index;
         int length = (nPduContext - index) <= batchSize ? (nPduContext - index) : batchSize;
         index += length;

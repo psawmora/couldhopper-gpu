@@ -2,6 +2,7 @@
 #include "smpp_codec.h"
 
 int useGpu = 0;
+int useDynamicParallelism = 0;
 CudaDim blockDimProdction;
 CudaDim gridDimProduction;
 int cpuDecodeThreshold = 4000;
@@ -33,6 +34,8 @@ static int performanceMetricCount = 0;
 
 void configureTuner(config_t *propConfig);
 
+CudaDecodedContext *decodeGpuDynamic(DecoderMetadata decoderMetadata);
+
 void init(CodecConfiguration *configuration) {
     // Need to initialize loggers.
     // Then need to pre-allocate pinned memory and Cuda Global Memory.
@@ -51,6 +54,7 @@ void init(CodecConfiguration *configuration) {
     }
 
     config_lookup_bool(&propConfig, "isUseGpu", &useGpu);
+    config_lookup_bool(&propConfig, "isUseDynamicParallelism", &useDynamicParallelism);
     config_lookup_int(&propConfig, "max_packet_size", &maxPacketSize);
     config_lookup_int(&propConfig, "max_batch_size", &maxBatchSize);
     config_lookup_int(&propConfig, "tuner_loop_count", &tunerLoopCount);
@@ -173,20 +177,22 @@ void startPerfTuner(DecoderMetadata decoderMetadata) {
                            "Block Size {x,y,z} - {%d, %d, %d} | Grid Size {x,y,z} - {%d, %d, %d} \n",
                            blockDim.x, blockDim.y, blockDim.z, gridDim.x, gridDim.y, gridDim.z);
         log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO,
-                           "Number of packets being decoded - %d\n\n", decoderMetadata.size);
+                           "Number of packets being decoded - %d\n", decoderMetadata.size);
+
+        log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO,
+                           "Is Using Dynamic Parallelism - %d\n\n", useDynamicParallelism);
         time(&start_t);
         clock_gettime(CLOCK_MONOTONIC, &tstart);
 
-/*
         for (j = 0; j < tunerLoopCount; j++) {
-            CudaDecodedContext *pStruct = decodeGpu(decoderMetadata);
-            free(pStruct);
+            if (useDynamicParallelism) {
+                CudaDecodedContext *pStruct = decodeGpuDynamic(decoderMetadata);
+                free(pStruct);
+            } else {
+                CudaDecodedContext *pStruct = decodeGpu(decoderMetadata);
+                free(pStruct);
+            }
         }
-*/
-        CudaDecodedContext *decodedPduStructList = malloc(sizeof(CudaDecodedContext) * decoderMetadata.size);
-        CudaMetadata metadata = {decoderMetadata.size, decoderMetadata.pduBuffers, -1, decodedPduStructList, (uint64_t) decoderMetadata.bufferCapacity,
-                                 decoderMetadata.blockDim, decoderMetadata.gridDim};
-        calculateStartPosition(metadata);
 
         time(&end_t);
         clock_gettime(CLOCK_MONOTONIC, &tend);
@@ -201,7 +207,17 @@ void startPerfTuner(DecoderMetadata decoderMetadata) {
     fflush(stdout);
 }
 
+CudaDecodedContext *decodeGpuDynamic(DecoderMetadata decoderMetadata) {
+    CudaDecodedContext *decodedPduStructList = malloc(sizeof(CudaDecodedContext) * decoderMetadata.size);
+    CudaMetadata metadata = {decoderMetadata.size, decoderMetadata.pduBuffers, -1, decodedPduStructList,
+                             (uint64_t) decoderMetadata.bufferCapacity,
+                             decoderMetadata.blockDim, decoderMetadata.gridDim};
+    decodeCudaDynamic(metadata);
+    return decodedPduStructList;
+}
+
 CudaDecodedContext *decodeGpu(DecoderMetadata decoderMetadata) {
+//    printf("Decode GPU\n");
     uint8_t *pduBuffers = decoderMetadata.pduBuffers;
     uint32_t size = decoderMetadata.size;
     uint64_t bufferCapacity = decoderMetadata.bufferCapacity;
@@ -211,13 +227,14 @@ CudaDecodedContext *decodeGpu(DecoderMetadata decoderMetadata) {
     int i;
     int startPosition = 0;
     for (i = 0; i < size; i++) {
+        byteBufferContext.readIndex += 12;
         char *correlationId = readStringByLength(&byteBufferContext, correlationIdLength);
         uint32_t pduLength = readUint32(&byteBufferContext);
-        int startIndex = startPosition + correlationIdLength;
+        int startIndex = startPosition + correlationIdLength + 12;
         strncpy(pduContexts[i].correlationId, correlationId, sizeof(char) * (correlationIdLength + 1));
         pduContexts[i].start = (uint32_t) startIndex;
         pduContexts[i].length = pduLength;
-        startPosition += (correlationIdLength + pduLength);
+        startPosition += (correlationIdLength + pduLength + 12);
         byteBufferContext.readIndex = (uint64_t) startPosition;
     }
 
@@ -240,14 +257,15 @@ DecodedContext *decodePthread(DecoderMetadata decoderMetadata) {
     int i;
     int startPosition = 0;
     for (i = 0; i < size; i++) {
+        byteBufferContext.readIndex += 12;
         char *correlationId = readStringByLength(&byteBufferContext, correlationIdLength);
         uint32_t pduLength = readUint32(&byteBufferContext);
-        int startIndex = startPosition + correlationIdLength;
+        int startIndex = startPosition + correlationIdLength + 12;
         pduContexts[i].correlationId = correlationId;
         pduContexts[i].pduBuffer = pduBuffers;
         pduContexts[i].start = startIndex;
         pduContexts[i].length = pduLength;
-        startPosition += (correlationIdLength + pduLength);
+        startPosition += (correlationIdLength + pduLength + 12);
         byteBufferContext.readIndex = startPosition;
     }
 
