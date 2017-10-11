@@ -169,6 +169,7 @@ void startPerfTuner(DecoderMetadata decoderMetadata) {
 
     log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "\nStarting Performance Tuning For GPU\n");
     log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "===================================\n\n");
+    printf("SIZE - %ld", sizeof(CudaPduContext) * 1024);
     for (i = 0; i < performanceMetricCount; i++) {
         CudaDim gridDim = performanceMetric.gridDimList[i];
         CudaDim blockDim = performanceMetric.blockDimList[i];
@@ -189,6 +190,9 @@ void startPerfTuner(DecoderMetadata decoderMetadata) {
             if (useDynamicParallelism) {
                 CudaDecodedContext *pStruct = decodeGpuDynamic(decoderMetadata);
                 gpuEventTime += cudaEventRunningTime;
+//                printf("Smpp Pdu type %d\n", pStruct[decoderMetadata.size - 1].commandId);
+//                printf("Smpp CorrelationId %s\n", pStruct[decoderMetadata.size - 1].correlationId);
+//                printf("Smpp Message %s\n", pStruct[decoderMetadata.size - 1].pduStruct.shortMessage);
                 free(pStruct);
             } else {
                 CudaDecodedContext *pStruct = decodeGpu(decoderMetadata);
@@ -201,7 +205,7 @@ void startPerfTuner(DecoderMetadata decoderMetadata) {
         clock_gettime(CLOCK_MONOTONIC, &tend);
         diff_t = (((double) tend.tv_sec + 1.0e-9 * tend.tv_nsec) - ((double) tstart.tv_sec + 1.0e-9 * tstart.tv_nsec)) /
                  tunerLoopCount;
-        log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "TimeTaken - %.5f \n", diff_t);
+        log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "TimeTaken - %.5f \n", (diff_t * 1000000));
         log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "Throughput - %.5f \n", (decoderMetadata.size) / diff_t);
         log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "Time for a single packet (Micro-Seconds) - %.5f \n\n",
                            (diff_t * 1000000) / (decoderMetadata.size));
@@ -209,6 +213,7 @@ void startPerfTuner(DecoderMetadata decoderMetadata) {
         log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, " =====================\n");
     }
     freePinndedMemory();
+    freePinndedPduContext(maxBatchSize, cudaPduContext);
 }
 
 CudaDecodedContext *decodeGpuDynamic(DecoderMetadata decoderMetadata) {
@@ -221,6 +226,9 @@ CudaDecodedContext *decodeGpuDynamic(DecoderMetadata decoderMetadata) {
 }
 
 CudaDecodedContext *decodeGpu(DecoderMetadata decoderMetadata) {
+    if (useDynamicParallelism) {
+        return decodeGpuDynamic(decoderMetadata);
+    }
     uint8_t *pduBuffers = decoderMetadata.pduBuffers;
     uint32_t size = decoderMetadata.size;
     uint64_t bufferCapacity = decoderMetadata.bufferCapacity;

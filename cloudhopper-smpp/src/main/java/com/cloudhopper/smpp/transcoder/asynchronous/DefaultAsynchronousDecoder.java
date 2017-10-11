@@ -4,6 +4,8 @@ import com.cloudhopper.smpp.impl.SmppSessionChannelListener;
 import com.cloudhopper.smpp.pdu.Pdu;
 import com.cloudhopper.smpp.pdu.SubmitSm;
 import com.cloudhopper.smpp.transcoder.PduTranscoder;
+import com.cloudhopper.smpp.type.RecoverablePduException;
+import com.cloudhopper.smpp.type.UnrecoverablePduException;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,9 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -34,6 +34,8 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
 
     public static int MAX_PDU_LENGTH = 200;
 
+    private boolean isUseJava;
+
     private Map<String, SmppSessionChannelListener> sessionChannelListeners;
 
     private PduTranscoder pduTranscoder;
@@ -50,6 +52,8 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
 
     private int batchSize = 200000;
 
+    private int javaThreadCount = 1;
+
     private AtomicInteger currentBatchSize;
 
     private AtomicInteger index;
@@ -61,6 +65,8 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
     private volatile boolean isAccept = true;
 
     private String configurationFilePath;
+
+    private List<ChannelBuffer> pduBuffers;
 
     private native List<DecodedPduContext> decodePDU(List<AsynchronousContext> bufferContexts);
 
@@ -92,6 +98,9 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
             configurationFilePath = properties.getProperty("codec.configuration.file.path",
                     "/home/prabath/Projects/Msc/couldhopper-gpu/codec-core/src/main/resources/codec-mode.cfg");
             isTuningMode = Boolean.parseBoolean(properties.getProperty("tuning.mode.on", "false"));
+            isUseJava = Boolean.parseBoolean(properties.getProperty("is.use.java", "false"));
+            javaThreadCount = Integer.parseInt(properties.getProperty("java.thread.count", "1"));
+            this.pduBuffers = new ArrayList<>();
         } catch (IOException e) {
             logger.error("Error occurred while loading properties", e);
             System.exit(-1);
@@ -111,10 +120,57 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
         sendAsynch(asynchronousContext, listener);
     }
 
+    private void startJavaBasedDecoding(int startPosition, int length, CountDownLatch barrier) {
+        System.out.println("Length - " + length + " | Start - " + startPosition);
+        if (length <= 0) {
+            barrier.countDown();
+        } else {
+            for (int i = 0; i < length; i++) {
+                try {
+                    pduTranscoder.decode(pduBuffers.get(startPosition + i));
+                } catch (RecoverablePduException | UnrecoverablePduException e) {
+                    System.out.println("Error - 1" + e);
+                    logger.error("Error occurred while decoding the PDU.", e);
+                    barrier.countDown();
+                    return;
+                }
+            }
+            barrier.countDown();
+        }
+    }
+
     private Future<?> sendAsynch(final AsynchronousContext asynchronousContext, final SmppSessionChannelListener listener) {
         if (!isAccept) {
             logger.debug("Not accepting requests as the performance tuning is on the way");
             return null;
+        }
+        if (isUseJava) {
+            synchronized (DefaultAsynchronousDecoder.class) {
+                this.pduBuffers.add(asynchronousContext.getChannelBuffer().copy());
+                if (this.pduBuffers.size() >= batchSize) {
+                    System.out.println("Batch Size - " + pduBuffers.size());
+                    isAccept = false;
+                    CountDownLatch barrier = new CountDownLatch(javaThreadCount);
+                    long startTime = System.nanoTime();
+                    int currentPosition = 0;
+                    int collectionSize = pduBuffers.size() / javaThreadCount;
+                    for (int i = 0; i < javaThreadCount; i++) {
+                        int startPosition = currentPosition;
+                        int length = collectionSize - startPosition;
+                        currentPosition = currentPosition + collectionSize;
+                        startJavaBasedDecoding(startPosition, length, barrier);
+                    }
+                    try {
+                        barrier.await();
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    long endTime = System.nanoTime();
+                    System.out.println("Throughput - " + (((float)pduBuffers.size() / (float)(endTime - startTime))) * 1000000000);
+                    System.out.println("Decoded - " + (endTime - startTime));
+                }
+            }
+            return new CompletableFuture<>();
         }
         return executorService.submit(() -> {
             try {
@@ -138,7 +194,6 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
                     if (isTuningMode) {
                         isAccept = false;
                         logger.debug("Starting performance tuning and sending batch");
-                        System.out.println("Starting performance tuning and sending batch");
                         startTuner(pduContainerBufferActive, batchSize, 15);
                         pduContainerBufferActive.position(0);
                         logger.debug("Performance tuning ended.");
@@ -146,8 +201,6 @@ public class DefaultAsynchronousDecoder implements AsynchronousDecoder {
                         logger.debug("Sending the batch to the decoder");
                         System.out.println("Sending the batch to the decoder");
                         List<DecodedPduContext> decodedPduContexts = decodePDUDirect(pduContainerBufferActive, batchSize, 15);
-                        System.out.println("Got Response " + decodedPduContexts.size());
-                        System.out.println("First byte - " + pduContainerBufferActive.get(0));
                         pduContainerBufferActive.position(0);
                         notifyListeners(decodedPduContexts);
                     }

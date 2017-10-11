@@ -90,14 +90,6 @@ decodeWithCuda(JNIEnv *env, jobject pduContainerBuffer, jint size, jint correlat
     decoderMetadata.gridDim = gridDimProduction;
     CudaDecodedContext *decodedPduStructList = decodeGpu(decoderMetadata);
 
-    time(&end_t);
-    clock_gettime(CLOCK_MONOTONIC, &tend);
-    diff_t = difftime(end_t, start_t);
-
-    printf("Cuda Decoding Completed - TimeTaken %.5f \n",
-           ((double) tend.tv_sec + 1.0e-9 * tend.tv_nsec) -
-           ((double) tstart.tv_sec + 1.0e-9 * tstart.tv_nsec));
-
     jclass decodedContextContainerClass = jClassCache.arrayListClass;
     jmethodID decodedContextContainerMethod = jmethodCache.decodedContextContainerMethod;
     jobject decodedContextContainer = (*env)->NewObject(env, decodedContextContainerClass, decodedContextContainerMethod);
@@ -199,11 +191,11 @@ decodeWithPthread(JNIEnv *env, jobject pduContainerBuffer, jint size, jint corre
 }
 
 jobject *createPdu(JNIEnv *env, DecodedContext *decodedContext) {
-    printf("SMPP PDU type %d\n", decodedContext->commandId);
+//    printf("SMPP PDU type %d\n", decodedContext->commandId);
     if (decodedContext->commandId == 4 || decodedContext->commandId == 5) {
         BaseSmReq baseSmReq = *(BaseSmReq *) decodedContext->pduStruct;
-        printf("BaseSm Request - %d\n", baseSmReq.esmClass);
-        printf("BaseSm setCommandLength - %d\n", baseSmReq.header->commandLength);
+//        printf("BaseSm Request - %d\n", baseSmReq.esmClass);
+//        printf("BaseSm setCommandLength - %d\n", baseSmReq.header->commandLength);
 
         jclass baseSmClass;
         baseSmClass = (decodedContext->commandId == 4) ? jClassCache.submitSmClass : jClassCache.deliverSmClass;
@@ -212,32 +204,32 @@ jobject *createPdu(JNIEnv *env, DecodedContext *decodedContext) {
         jmethodID constructor = jmethodCache.constructor;
         jobject baseSmObject = (*env)->NewObject(env, baseSmClass, constructor);
 
-        printf("BaseSm setCommandLength - %d\n", baseSmReq.header->commandLength);
+//        printf("BaseSm setCommandLength - %d\n", baseSmReq.header->commandLength);
         jmethodID setCommandLength = jmethodCache.setCommandLength;
         (*env)->CallObjectMethod(env, baseSmObject, setCommandLength, baseSmReq.header->commandLength);
 
-        printf("BaseSm setCommandStatus - %d\n", baseSmReq.header->commandStatus);
+//        printf("BaseSm setCommandStatus - %d\n", baseSmReq.header->commandStatus);
         jmethodID setCommandStatus = jmethodCache.setCommandStatus;
         (*env)->CallObjectMethod(env, baseSmObject, setCommandStatus, baseSmReq.header->commandStatus);
 
-        printf("BaseSm sequenceNumber - %d\n", baseSmReq.header->sequenceNumber);
+//        printf("BaseSm sequenceNumber - %d\n", baseSmReq.header->sequenceNumber);
         jmethodID setSequenceNumber = jmethodCache.setSequenceNumber;
         (*env)->CallObjectMethod(env, baseSmObject, setSequenceNumber, baseSmReq.header->sequenceNumber);
 
-        printf("BaseSm service type- %s\n", baseSmReq.serviceType);
+//        printf("BaseSm service type- %s\n", baseSmReq.serviceType);
         jmethodID setServiceType = jmethodCache.setServiceType;
         (*env)->CallObjectMethod(env, baseSmObject, setServiceType,
                                  (*env)->NewStringUTF(env, baseSmReq.serviceType));
 
-        printf("BaseSm Source Address - %s\n", baseSmReq.sourceAddress->addressValue);
+//        printf("BaseSm Source Address - %s\n", baseSmReq.sourceAddress->addressValue);
         jmethodID setSourceAddress = jmethodCache.setSourceAddress;
         jobject *srcAddress = getAddress(env, baseSmReq.sourceAddress);
         (*env)->CallObjectMethod(env, baseSmObject, setSourceAddress, srcAddress);
 
-        printf("BaseSm Destination ton - %d\n", baseSmReq.destinationAddress->ton);
+//        printf("BaseSm Destination ton - %d\n", baseSmReq.destinationAddress->ton);
         jmethodID setDestAddress = jmethodCache.setDestAddress;
         (*env)->CallObjectMethod(env, baseSmObject, setDestAddress, getAddress(env, baseSmReq.destinationAddress));
-        printf("BaseSm Destination Address - %s\n", baseSmReq.destinationAddress->addressValue);
+//        printf("BaseSm Destination Address - %s\n", baseSmReq.destinationAddress->addressValue);
 
         jmethodID setEsmClass = jmethodCache.setEsmClass;
         (*env)->CallObjectMethod(env, baseSmObject, setEsmClass, baseSmReq.esmClass);
@@ -283,11 +275,11 @@ jobject *createPdu(JNIEnv *env, DecodedContext *decodedContext) {
 }
 
 jobject *createPduOnCuda(JNIEnv *env, CudaDecodedContext *decodedContext) {
-    printf("SMPP PDU type %d\n", decodedContext->commandId);
+//    printf("SMPP PDU type %d\n", decodedContext->commandId);
     if (decodedContext->commandId == 4 || decodedContext->commandId == 5) {
         CudaBaseSmReq baseSmReq = decodedContext->pduStruct;
 //        printf("SubmitSm Request - %d\n", baseSmReq.esmClass);
-//        printf("SubmitSm setCommandLength - %ld\n", baseSmReq.header.commandLength);
+//        printf("SubmitSm setCommandLength - %d\n", baseSmReq.header.commandLength);
         jclass baseSmClass;
         baseSmClass = (decodedContext->commandId == 4) ? jClassCache.submitSmClass : jClassCache.deliverSmClass;
 //        printf("SubmitSm class found - %s\n", submitSmClass);
