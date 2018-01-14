@@ -9,7 +9,7 @@ int cpuDecodeThreshold = 4000;
 int nCpuCores = 2;
 int cudaStreamCount = 1;
 float cudaEventRunningTime = 0;
-
+int printAccuracyLog=0;
 static CudaPduContext *cudaPduContext; // Pre-allocate Cuda-Context for decoding;
 
 static uint32_t currentCudaContextSize;
@@ -61,6 +61,7 @@ void init(CodecConfiguration *configuration) {
     config_lookup_int(&propConfig, "tuner_loop_count", &tunerLoopCount);
     config_lookup_int(&propConfig, "number_of_cpu_cores", &nCpuCores);
     config_lookup_int(&propConfig, "cuda_stream_count", &cudaStreamCount);
+    config_lookup_bool(&propConfig, "print_accuracy_log", &printAccuracyLog);
 
     currentCudaContextSize = (uint32_t) maxBatchSize;
     cudaPduContext = allocatePinnedPduContext(maxBatchSize);
@@ -69,8 +70,8 @@ void init(CodecConfiguration *configuration) {
     int isTunerMode = 0;
     config_lookup_bool(&propConfig, "isTunerMode", &isTunerMode);
     currentMode = isTunerMode ? TUNER : PRODUCTION;
-    printf("Is Use GPU %d | Max Packet Size %d | Max Batch Size %d | Tuner Mode %d\n",
-           useGpu, maxPacketSize, maxBatchSize, currentMode);
+    printf("Is Use GPU %d | Max Packet Size %d | Max Batch Size %d | Tuner Mode %d | Accuracy Log %d\n",
+           useGpu, maxPacketSize, maxBatchSize, currentMode, printAccuracyLog);
     fflush(stdout);
     switch (currentMode) {
         case TUNER: {
@@ -136,6 +137,8 @@ void configureTuner(config_t *propConfig) {
 }
 
 void startPerfTunerPthread(DecoderMetadata decoderMetadata) {
+    printf("Printing accuracy - %d", printAccuracyLog);
+    fflush(stdout);
     log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO, "\nStarting Performance Tuning For CPU\n");
     log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO, "===================================\n\n");
     int i, j;
@@ -148,6 +151,18 @@ void startPerfTunerPthread(DecoderMetadata decoderMetadata) {
                        "Number of packets being decoded - %d\n\n", decoderMetadata.size);
     for (i = 0; i < tunerLoopCount; i++) {
         DecodedContext *pStruct = decodePthread(decoderMetadata);
+        if(printAccuracyLog) {
+         printf("Printing accuracy logs - %d", decoderMetadata.size);
+         fflush(stdout);
+         int j;
+         for(j = 0; j < decoderMetadata.size; j++){
+           DecodedContext decodedContext = pStruct[j];
+           BaseSmReq baseSmReq = *(BaseSmReq *) decodedContext.pduStruct;
+           log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO, "source-address-value - %s|", baseSmReq.sourceAddress->addressValue);
+           log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO, "destination-address-value - %s|", baseSmReq.destinationAddress->addressValue);
+           log4c_category_log(cpuTunerCategory, LOG4C_PRIORITY_INFO, "message - %s\n", baseSmReq.shortMessage);
+         }
+        }
         free(pStruct);
     }
     time(&end_t);
@@ -187,18 +202,32 @@ void startPerfTuner(DecoderMetadata decoderMetadata) {
         clock_gettime(CLOCK_MONOTONIC, &tstart);
         float gpuEventTime = 0;
         for (j = 0; j < tunerLoopCount; j++) {
+            CudaDecodedContext *pStruct;
             if (useDynamicParallelism) {
-                CudaDecodedContext *pStruct = decodeGpuDynamic(decoderMetadata);
+                 pStruct = decodeGpuDynamic(decoderMetadata);
                 gpuEventTime += cudaEventRunningTime;
 //                printf("Smpp Pdu type %d\n", pStruct[decoderMetadata.size - 1].commandId);
 //                printf("Smpp CorrelationId %s\n", pStruct[decoderMetadata.size - 1].correlationId);
 //                printf("Smpp Message %s\n", pStruct[decoderMetadata.size - 1].pduStruct.shortMessage);
-                free(pStruct);
             } else {
-                CudaDecodedContext *pStruct = decodeGpu(decoderMetadata);
+                pStruct = decodeGpu(decoderMetadata);
                 gpuEventTime += cudaEventRunningTime;
-                free(pStruct);
             }
+
+            if(printAccuracyLog) {
+               printf("Printing accuracy logs - %d", decoderMetadata.size);
+               fflush(stdout);
+               int j;
+               printf("Decoded Context count - %d", decoderMetadata.size);
+               for(j = 0; j < decoderMetadata.size; j++){
+                   CudaDecodedContext decodedContext = pStruct[j];
+                   CudaBaseSmReq baseSmReq = (CudaBaseSmReq) decodedContext.pduStruct;
+                   log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "source-address-value - %s|", baseSmReq.sourceAddress.addressValue);
+                   log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "destination-address-value - %s|", baseSmReq.destinationAddress.addressValue);
+                   log4c_category_log(gpuTunerCategory, LOG4C_PRIORITY_INFO, "message - %s\n", baseSmReq.shortMessage);
+               }
+            }
+            free(pStruct);
         }
 
         time(&end_t);

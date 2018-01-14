@@ -128,21 +128,15 @@ DecodedTlvContext decodeTlv(ByteBufferContext *context) {
     DecodedTlvContext decodedTlvContext;
     uint16_t tlvCount = 0;
     Tlv *tlvList = malloc(sizeof(Tlv) * 10); // This need to be a dynamic list.
-//    printf("Tlv read-index - %d | limit - %d\n", context->readIndex, context->limit);
     while ((context->readIndex - context->initialReadIndex) < context->limit - 4 && tlvCount < 10) {
         uint16_t tag = readUint16(context);
-//        printf("tlv count  - %d\n", tlvCount);
-//        printf("tag - %d\n", tag);
         uint32_t length = readUint16(context);
-//        printf("length - %d\n", length);
         if ((context->readIndex - context->initialReadIndex) <= context->limit - length) {
             uint8_t *value = readNBytes(context, length);
-//            printf("VALUEEEEEEEEEEEEEEEEEEEEEEEEEE - %s\n", value);
             Tlv tlv = {tag, length, value};
             tlvList[tlvCount] = tlv;
             tlvCount++;
         } else {
-//            printf("Tlv remaining - %d - %d\n", (context->readIndex - context->initialReadIndex), context->limit - length);
             break;
         }
     }

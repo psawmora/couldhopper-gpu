@@ -48,7 +48,7 @@ __global__ void launchDecodeLocal(int nPduContext, int startIndex, CudaPduContex
     int threadIndex = ((threadIdx.x + threadIdx.y * blockDim.x) + (blockDim.x * blockDim.y) * threadIdx.z) +
                       (blockDim.x * blockDim.y * blockDim.z) *
                       ((gridDim.x * blockIdx.y) + (blockIdx.x) + (gridDim.x * gridDim.y) * blockIdx.z);
-
+     //printf("IN - 2 \n");
     CudaPduContext *pduContexts = originalPduContexts + startIndex;
     CudaDecodedContext *decodedPduStructList = originalDecodedPduStructList + startIndex;
     int initBatchSize = nPduContext / ((blockDim.x * blockDim.y * blockDim.z) * (gridDim.x * gridDim.y * gridDim.z));
@@ -57,9 +57,29 @@ __global__ void launchDecodeLocal(int nPduContext, int startIndex, CudaPduContex
     int additionalElements = threadIndex < remainder ? 1 : 0;
     int batchSize = initBatchSize + additionalElements;
     if (batchSize > 0) {
+/*
+        if ((threadIdx.x + threadIdx.y * blockDim.x + (blockDim.x * blockDim.y) * threadIdx.z) == 0) {
+            printf("pdu count 1 - 0 - %d\n", nPduContext);
+        }
+*/
+//        printf("batch size - %d\n", batchSize);
         int i;
+/*
         for (i = 0; i < batchSize; i++) {
             int index = threadIndex + i * ((blockDim.x * blockDim.y * blockDim.z) * (gridDim.x * gridDim.y * gridDim.z));
+            int localIndex = (threadIdx.x + threadIdx.y * blockDim.x + (blockDim.x * blockDim.y) * threadIdx.z) + i;
+            CudaPduContext aStruct1 = pduContexts[index];
+            CudaPduContext aStruct2 = directPduContext[localIndex];
+            aStruct2 = aStruct1;
+        }
+*/
+//        __syncthreads();
+        for (i = 0; i < batchSize; i++) {
+            int index = threadIndex + i * ((blockDim.x * blockDim.y * blockDim.z) * (gridDim.x * gridDim.y * gridDim.z));
+/*
+            CudaPduContext *cudaPduContext = &directPduContext[
+                    (threadIdx.x + threadIdx.y * blockDim.x + (blockDim.x * blockDim.y) * threadIdx.z) + i];
+*/
             CudaPduContext *cudaPduContext = &pduContexts[index];
             CudaDecodedContext *decodedPduStruct = &decodedPduStructList[index];
             decodeSinglePdu(cudaPduContext, decodedPduStruct, pduBuffer);
@@ -102,7 +122,7 @@ __global__ void findPacketBoundry(uint8_t *pduBuffer,
                          (threadIndex - remainder) * initBatchSize * 20;
         }
         int stop = 0;
-        uint64_t count = 0;
+        int count = 0;
         int patternPosition = 0;
         int numberOfPdu = 0;
 
@@ -114,9 +134,11 @@ __global__ void findPacketBoundry(uint8_t *pduBuffer,
                 patternPosition = 0;
             }
             if (patternPosition == 8) {
+                ++numberOfPdu;
+                patternPosition = 0;
 
                 uint64_t breakPoint = (uint64_t) (startIndex + count + 1);
-                uint64_t index = readUint32WithoutContext(pduBuffer, (uint64_t) breakPoint);
+                int index = readUint32WithoutContext(pduBuffer, (uint64_t) breakPoint);
                 CudaPduContext *pduContext = &globalDirectPduContext[index];
                 breakPoint += 4;
 
@@ -128,32 +150,37 @@ __global__ void findPacketBoundry(uint8_t *pduBuffer,
                 uint32_t pduLength = readUint32WithoutContext(pduBuffer, (uint64_t) breakPoint);
                 pduContext->start = (uint32_t) breakPoint;
                 pduContext->length = pduLength;
-                breakPoint += pduLength;
-
-                count = breakPoint;
-                numberOfPdu++;
-                patternPosition = 0;
+                breakPoint += pduLength - 1;
                 atomicMin(&minPduIndex, index);
-            } else {
-                count++;
+                /**
+                 * 1. Create CudaPduContext with start and length values.
+                 * 2. Store it in block shared memory.
+                 * 3. After the block is done processing, store them in the global memory.
+                 * 4. Call the child kernel to do the actual decoding.
+                 */
             }
+            count++;
             if ((patternPosition == 0 && count >= batchSize) || (startIndex + count) >= bufferLength) {
                 stop = 1;
             }
         }
+//        printf("Pdu Count - %d\n", numberOfPdu);
         atomicAdd(&nPduCount, numberOfPdu);
     }
 
     __syncthreads();
     if (threadBlockIndex == 0) {
         if (nPduCount > 0) {
-            int blockSize = nPduCount >= 256 ? 256 : nPduCount;
+            int blockSize = nPduCount >= 256 ? 256 / 3 : nPduCount / 3;
             int gridSize = (nPduCount / blockSize) >= 1 ? (nPduCount / blockSize) : 1;
-            dim3 blockDim(blockSize, 1, 1);
+            printf("Pdu Count - 0 - %d - min - %d - Grid - %d and Block - %d\n", nPduCount, minPduIndex,gridSize, blockSize);
+
             dim3 gridDim(gridSize, 1, 1);
+            dim3 blockDim(blockSize, 1, 1);
             launchDecodeLocal << < gridDim, blockDim >> >
                                             (nPduCount, minPduIndex, globalDirectPduContext, decodedPduStructList, pduBuffer);
         }
+        cudaDeviceSynchronize();
     }
 }
 
@@ -164,15 +191,20 @@ __global__ void launchDecode(int nPduContext, CudaPduContext *pduContexts,
                       ((gridDim.x * blockIdx.y) + (blockIdx.x) + (gridDim.x * gridDim.y) * blockIdx.z);
 
 
+//    printf("ThreadIndex - x - %d | y - %d\n", threadIdx.x, threadIdx.y);
+//    printf("decoding launched  - Correlation Id %s | Length - %d\n", pduContexts[0].correlationId, pduContexts[0].start);
+
     int initBatchSize = nPduContext / ((blockDim.x * blockDim.y * blockDim.z) * (gridDim.x * gridDim.y * gridDim.z));
     int remainder = nPduContext % ((blockDim.x * blockDim.y * blockDim.z) * (gridDim.x * gridDim.y * gridDim.z));
 
+//    int additionalElements = threadIndex < remainder ? 1 : 0;
     int additionalElements = threadIndex < remainder ? 1 : 0;
     int batchSize = initBatchSize + additionalElements;
     if (batchSize > 0) {
         int i;
         for (i = 0; i < batchSize; i++) {
             int index = threadIndex + i * ((blockDim.x * blockDim.y * blockDim.z) * (gridDim.x * gridDim.y * gridDim.z));
+//            printf("ThreadIndex - 1 - %d | Index - %d\n", threadIndex, index);
             directPduContext[(threadIdx.x + threadIdx.y * blockDim.x + (blockDim.x * blockDim.y) * threadIdx.z) + i]
                     = pduContexts[index];
         }

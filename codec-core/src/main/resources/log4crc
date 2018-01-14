@@ -12,15 +12,20 @@
 
     <category name="root" priority="notice"/>
     <category name="stat_logger" priority="trace" appender="stat_appender"/>
+    <category name="accuracy_log" priority="trace" appender="accuracy_log_appender"/>
     <category name="performance_tuning_gpu_logger" priority="info" appender="performance_tuning_gpu_appender"/>
     <category name="performance_tuning_cpu_logger" priority="info" appender="performance_tuning_cpu_appender"/>
 
     <rollingpolicy name="stat_rolling_policy" type="sizewin" maxsize="1024" maxnum="10"/>
+    <rollingpolicy name="accuracy_log_policy" type="sizewin" maxsize="1024000" maxnum="10"/>
     <rollingpolicy name="performance_rolling_policy_cpu" type="sizewin" maxsize="102400" maxnum="100"/>
     <rollingpolicy name="performance_rolling_policy_gpu" type="sizewin" maxsize="102400" maxnum="100"/>
 
     <appender name="stat_appender" type="rollingfile" logdir="/logs/smpp-server" prefix="smpp_decoding_stat" layout="basic"
               rollingpolicy="stat_rolling_policy"/>
+
+    <appender name="accuracy_log_appender" type="rollingfile" logdir="/logs/smpp-server" prefix="smpp_decoding_stat" layout="basic"
+              rollingpolicy="accuracy_log_policy"/>
 
     <appender name="performance_tuning_gpu_appender" type="rollingfile" logdir="/logs/smpp-server" prefix="performance_tuning_gpu" layout="none"
               rollingpolicy="performance_rolling_policy_gpu"/>

@@ -67,7 +67,7 @@ JNIEXPORT jobject JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_Defa
 JNIEXPORT void JNICALL Java_com_cloudhopper_smpp_transcoder_asynchronous_DefaultAsynchronousDecoder_startTuner(
         JNIEnv *env, jobject thisObj, jobject pduContainerBuffer, jint size, jint correlationIdLength) {
     log4c_category_log(statLogger, LOG4C_PRIORITY_DEBUG, "Preparing for performance tuning .....");
-    printf("Starting performance tuning \n");
+    printf("Starting performance tuning - %d\n", useGpu);
     fflush(stdout);
     jlong bufferCapacity = (*env)->GetDirectBufferCapacity(env, pduContainerBuffer);
     uint8_t *pduBuffers = (uint8_t *) (*env)->GetDirectBufferAddress(env, pduContainerBuffer);
@@ -191,20 +191,20 @@ decodeWithPthread(JNIEnv *env, jobject pduContainerBuffer, jint size, jint corre
 }
 
 jobject *createPdu(JNIEnv *env, DecodedContext *decodedContext) {
-//    printf("SMPP PDU type %d\n", decodedContext->commandId);
+    printf("SMPP PDU type %d\n", decodedContext->commandId);
     if (decodedContext->commandId == 4 || decodedContext->commandId == 5) {
         BaseSmReq baseSmReq = *(BaseSmReq *) decodedContext->pduStruct;
-//        printf("BaseSm Request - %d\n", baseSmReq.esmClass);
-//        printf("BaseSm setCommandLength - %d\n", baseSmReq.header->commandLength);
+        printf("BaseSm Request - %d\n", baseSmReq.esmClass);
+        printf("BaseSm setCommandLength - %d\n", baseSmReq.header->commandLength);
 
         jclass baseSmClass;
         baseSmClass = (decodedContext->commandId == 4) ? jClassCache.submitSmClass : jClassCache.deliverSmClass;
-//        printf("SubmitSm class found - %s\n", baseSmClass);
+        printf("SubmitSm class found - %s\n", baseSmClass);
 
         jmethodID constructor = jmethodCache.constructor;
         jobject baseSmObject = (*env)->NewObject(env, baseSmClass, constructor);
 
-//        printf("BaseSm setCommandLength - %d\n", baseSmReq.header->commandLength);
+        printf("BaseSm setCommandLength - %d\n", baseSmReq.header->commandLength);
         jmethodID setCommandLength = jmethodCache.setCommandLength;
         (*env)->CallObjectMethod(env, baseSmObject, setCommandLength, baseSmReq.header->commandLength);
 
@@ -275,11 +275,11 @@ jobject *createPdu(JNIEnv *env, DecodedContext *decodedContext) {
 }
 
 jobject *createPduOnCuda(JNIEnv *env, CudaDecodedContext *decodedContext) {
-//    printf("SMPP PDU type %d\n", decodedContext->commandId);
+    printf("SMPP PDU type %d\n", decodedContext->commandId);
     if (decodedContext->commandId == 4 || decodedContext->commandId == 5) {
         CudaBaseSmReq baseSmReq = decodedContext->pduStruct;
-//        printf("SubmitSm Request - %d\n", baseSmReq.esmClass);
-//        printf("SubmitSm setCommandLength - %d\n", baseSmReq.header.commandLength);
+        printf("SubmitSm Request - %d\n", baseSmReq.esmClass);
+        printf("SubmitSm setCommandLength - %d\n", baseSmReq.header.commandLength);
         jclass baseSmClass;
         baseSmClass = (decodedContext->commandId == 4) ? jClassCache.submitSmClass : jClassCache.deliverSmClass;
 //        printf("SubmitSm class found - %s\n", submitSmClass);
@@ -311,11 +311,11 @@ jobject *createPduOnCuda(JNIEnv *env, CudaDecodedContext *decodedContext) {
 //        printf("SubmitSm Destination Address - %s\n", baseSmReq.destinationAddress.addressValue);
         jmethodID setDestAddress = jmethodCache.setDestAddress;
         (*env)->CallObjectMethod(env, baseSmObject, setDestAddress, getCudaAddress(env, &baseSmReq.destinationAddress));
-//        printf("SubmitSm Destination Address - %s\n", baseSmReq.destinationAddress.addressValue);
+        printf("SubmitSm Destination Address - %s\n", baseSmReq.destinationAddress.addressValue);
 
         jmethodID setEsmClass = jmethodCache.setEsmClass;
         (*env)->CallObjectMethod(env, baseSmObject, setEsmClass, baseSmReq.esmClass);
-//        printf("Esm Class - %d\n", baseSmReq.esmClass);
+        printf("Esm Class - %d\n", baseSmReq.esmClass);
 
         jmethodID setProtocolId = jmethodCache.setProtocolId;
         (*env)->CallObjectMethod(env, baseSmObject, setProtocolId, baseSmReq.protocolId);
@@ -351,7 +351,7 @@ jobject *createPduOnCuda(JNIEnv *env, CudaDecodedContext *decodedContext) {
             jbyteArray shortMsgArray = (*env)->NewByteArray(env, baseSmReq.smLength);
             (*env)->SetByteArrayRegion(env, shortMsgArray, 0, baseSmReq.smLength, (const jbyte *) baseSmReq.shortMessage);
             (*env)->CallObjectMethod(env, baseSmObject, setShortMessage, shortMsgArray);
-//            printf("Short Message- %s\n", baseSmReq.shortMessage);
+            printf("Short Message- %s\n", baseSmReq.shortMessage);
         }
         return baseSmObject;
     }
